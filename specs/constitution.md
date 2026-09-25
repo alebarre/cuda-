@@ -18,6 +18,8 @@ Abre direto no navegador do celular, sem loja de apps, e pode ser instalada como
 - **P3 — Registro é imutável para auditoria.** Registros de cuidado (medicação, sinais vitais,
   ocorrências) não são apagados; correções geram novo registro que referencia o anterior.
   Todo registro guarda **quem** fez e **quando** (horário do fato e horário do lançamento).
+  Única exceção: a **exclusão do grupo inteiro pelo Responsável** (spec 000, AC-013), que apaga
+  todo o acervo do grupo de uma vez.
 - **P4 — Acessibilidade e legibilidade.** Fonte base ≥ 16px, alvos de toque ≥ 44px,
   contraste WCAG AA, linguagem simples em português (pt-BR).
 - **P5 — Dados de saúde são sensíveis (LGPD).** Mínimo de dados necessário, acesso somente a
@@ -32,7 +34,7 @@ permissão de **administrador**; o Familiar administrador é chamado de **Respon
 |---|---|
 | **Cuidador** | Registrar e consultar a rotina, criar avisos e pedidos de compra |
 | **Familiar** | Consultar tudo; criar avisos e pedidos de compra; não registra cuidado clínico |
-| **+ administrador** (= Responsável) | Tudo o que o Familiar pode, mais: gerenciar o idoso, convidar/aprovar/remover membros, configurar a rotina |
+| **+ administrador** (= Responsável) | Tudo o que o Familiar pode, mais: gerenciar o idoso, convidar/aprovar/remover membros, configurar a rotina, excluir o grupo (spec 000, AC-013) |
 
 - Cada grupo tem **exatamente um** administrador, que é sempre um Familiar: quem criou o grupo.
 - A permissão de administrador é fixa: não é transferida nem concedida a outro membro.
@@ -92,3 +94,4 @@ integrações com farmácias ou prontuários, app nativo.
 - 2026-09-25 — v1.0 — versão inicial.
 - 2026-09-25 — v1.1 — §3: um único Responsável por grupo, sem transferência do papel (spec 000 rev. 3/4).
 - 2026-09-25 — v1.2 — §3: Responsável deixa de ser um terceiro papel e passa a ser um **Familiar com permissão de administrador** (spec 000 rev. 9).
+- 2026-09-25 — v1.3 — P3: registrada a única exceção à imutabilidade, a **exclusão do grupo pelo Responsável** (spec 000 rev. 12, AC-013); §3: "excluir o grupo" entra na lista de poderes do administrador.

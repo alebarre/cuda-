@@ -5,7 +5,7 @@ nada de rotina existe sem idoso e membros, por isso a fundação vem primeiro.
 
 | # | Feature | Depende de | Status |
 |---|---|---|---|
-| 000 | Fundação: cadastro com aprovação, login, idoso e papéis | — | spec ✔ plan ✔ contrato ✔ tasks ✔ · implementação a fazer |
+| 000 | Fundação: cadastro com aprovação, login, idoso e papéis | — | spec ✔ rev. 17 (aprovada pelo revisor) · plan, contrato e tasks a revisar contra a rev. 17 · implementação a fazer · plan, contrato e tasks a revisar após a spec · implementação a fazer |
 | 001 | Medicamentos: prescrições, horários, administração, atrasos | 000 | — |
 | 002 | Refeições e hidratação | 000 | — |
 | 003 | Sinais vitais | 000 | — |

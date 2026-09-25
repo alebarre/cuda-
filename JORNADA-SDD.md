@@ -10,17 +10,18 @@
  ┌──────────────┐  ┌──────────┐      ┌──────┐   ┌──────┐   ┌──────────┐   ┌───────┐   ┌───────────┐   ┌─────────┐
  │ Constitution │→ │ Roadmap  │  →   │ Spec │ → │ Plan │ → │ Contrato │ → │ Tasks │ → │ Implement │ → │ Validar │
  └──────────────┘  └──────────┘      └──────┘   └──────┘   └──────────┘   └───────┘   └───────────┘   └─────────┘
-       ✔ v1.2          ✔                ✔ r9       ✔          ✔ 27 ops     ✔ 47 tarefas    ▶ AQUI
+       ✔ v1.3          ✔                ✔ r17      ▶          ↻ 27 ops     ↻ 47 tarefas    aguarda
                                       └──────────── o QUÊ ───────┘└──────── o COMO ────────┘└──── o CÓDIGO ─────┘
 ```
 
-**Feature atual:** 000 Fundação. **Próxima etapa:** implementação, começando pela Fase 0 do `tasks.md`.
+**Feature atual:** 000 Fundação. **Próxima etapa:** revisar plan, contrato e tasks contra a spec rev. 17 (↻)
+antes da Fase 0 do `tasks.md`.
 
 | Artefato | Arquivo | Responde | Status |
 |---|---|---|---|
-| Constitution | `specs/constitution.md` | Quais regras valem para tudo? | ✔ v1.2 |
+| Constitution | `specs/constitution.md` | Quais regras valem para tudo? | ✔ v1.3 |
 | Roadmap | `specs/roadmap.md` | Em que ordem, e o que depende do quê? | ✔ 9 features |
-| Spec | `specs/000-fundacao/spec.md` | **O quê** e **por quê**? | ✔ rev. 9, 11 histórias, 48 ACs, 0 dúvidas |
+| Spec | `specs/000-fundacao/spec.md` | **O quê** e **por quê**? | ✔ rev. 17, 12 histórias, 85 ACs, 0 dúvidas (`revisor-spec`: 3 rodadas + conferência, 31 dúvidas, todas respondidas) |
 | Plan | `specs/000-fundacao/plan.md` | **Como**? | ✔ 32 decisões (D-01…D-32) |
 | Contrato | `specs/000-fundacao/contracts/openapi.yaml` | Qual é o acordo exato entre front e back? | ✔ 27 operações, validado com Redocly |
 | Tasks | `specs/000-fundacao/tasks.md` | Em que passos pequenos e verificáveis? | ✔ 47 tarefas em 7 fases |
