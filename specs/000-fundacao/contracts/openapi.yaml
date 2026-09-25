@@ -1,0 +1,1100 @@
+openapi: 3.1.0
+info:
+  title: Cuida+ API — Feature 000 Fundação
+  version: 0.1.0
+  description: |
+    Contrato da feature 000 (grupo de cuidado, convites, aprovação e acesso).
+
+    - Spec: `specs/000-fundacao/spec.md` rev. 9
+    - Plan: `specs/000-fundacao/plan.md`
+    - Constitution: v1.2
+
+    Rastreabilidade: cada operação traz `x-acceptance-criteria` (ACs da spec que ela atende)
+    e, quando houver, `x-decisions` (decisões do plan). Um teste de contrato deve falhar se o
+    backend divergir deste arquivo.
+
+    Convenções (Constitution §5): JSON em camelCase, datas ISO-8601 com fuso, erros em
+    Problem Details (RFC 9457), rotas de rotina sob `/elders/{elderId}`.
+servers:
+  - url: /api/v1
+
+tags:
+  - name: auth
+    description: Criação do grupo, confirmação de e-mail, login, sessão e senha
+  - name: invitations-public
+    description: Uso do código de convite pelo convidado (sem login)
+  - name: me
+    description: Dados do próprio usuário
+  - name: elders
+    description: Idoso e contatos de emergência
+  - name: invitations
+    description: Gestão de convites pelo Responsável
+  - name: members
+    description: Pedidos de acesso e membros do grupo
+
+security:
+  - bearerAuth: []
+
+paths:
+  # ───────────────────────────── auth ─────────────────────────────
+  /auth/signup:
+    post:
+      tags: [auth]
+      operationId: signup
+      summary: Criar grupo de cuidado (cadastro do futuro Responsável)
+      description: |
+        Cria a conta em `AGUARDANDO_CONFIRMACAO_EMAIL` e envia o código por e-mail.
+        A resposta é **sempre 202**, exista ou não o e-mail (AC-001.4). Se o e-mail já existir,
+        nenhuma conta é criada e nenhum dado é revelado.
+      security: []
+      x-acceptance-criteria: [AC-001.1, AC-001.3, AC-001.4, AC-011.1, AC-011.2]
+      x-decisions: [D-15, D-25]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SignupRequest' }
+      responses:
+        '202': { $ref: '#/components/responses/AcceptedNeutral' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+
+  /auth/verify-email:
+    post:
+      tags: [auth]
+      operationId: verifyEmail
+      summary: Confirmar e-mail do criador do grupo
+      description: |
+        Com o código correto, o criador vira `ATIVO`, Familiar administrador (Responsável),
+        e já recebe a sessão para seguir ao cadastro do idoso (AC-001.2).
+      security: []
+      x-acceptance-criteria: [AC-001.2, AC-005.1, AC-005.2]
+      x-decisions: [D-04, D-05, D-11]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VerifyEmailRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/SessionStarted' }
+        '400': { $ref: '#/components/responses/InvalidCode' }
+        '410': { $ref: '#/components/responses/CodeExpiredOrExhausted' }
+
+  /auth/resend-code:
+    post:
+      tags: [auth]
+      operationId: resendCode
+      summary: Reenviar código (confirmação de e-mail ou redefinição de senha)
+      security: []
+      x-acceptance-criteria: [AC-005.3, AC-010.2]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ResendCodeRequest' }
+      responses:
+        '202': { $ref: '#/components/responses/AcceptedNeutral' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /auth/login:
+    post:
+      tags: [auth]
+      operationId: login
+      summary: Entrar com e-mail e senha
+      security: []
+      x-acceptance-criteria: [AC-008.1, AC-008.2, AC-008.4]
+      x-decisions: [D-11, D-12, D-14]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/SessionStarted' }
+        '401':
+          description: E-mail ou senha incorretos (mensagem única, não revela qual)
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '403':
+          description: |
+            Credenciais corretas, mas a pessoa não pode entrar. O `code` indica o motivo
+            e o frontend exibe a mensagem de AC-008.2.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/MembershipBlockedProblem' }
+        '423':
+          description: Login bloqueado por 15 minutos após 5 senhas erradas (AC-008.4)
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/LockedProblem' }
+
+  /auth/refresh:
+    post:
+      tags: [auth]
+      operationId: refreshSession
+      summary: Renovar a sessão com o refresh token (cookie)
+      description: |
+        Lê o cookie `refresh_token`, devolve um novo access token e **rotaciona** o cookie
+        (nova validade de 7 dias). Reapresentar um refresh token já usado revoga a família
+        inteira de tokens.
+      security:
+        - refreshCookie: []
+      x-acceptance-criteria: [AC-008.3, AC-009.2]
+      x-decisions: [D-11, D-12, D-13]
+      responses:
+        '200': { $ref: '#/components/responses/SessionStarted' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /auth/logout:
+    post:
+      tags: [auth]
+      operationId: logout
+      summary: Sair (revoga o refresh token e limpa o cookie)
+      responses:
+        '204':
+          description: Sessão encerrada
+          headers:
+            Set-Cookie:
+              description: '`refresh_token=; Max-Age=0; Path=/api/v1/auth; HttpOnly; Secure; SameSite=Strict`'
+              schema: { type: string }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /auth/password-reset/request:
+    post:
+      tags: [auth]
+      operationId: requestPasswordReset
+      summary: Pedir código para redefinir a senha
+      security: []
+      x-acceptance-criteria: [AC-010.1, AC-010.2]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmailOnly' }
+      responses:
+        '202': { $ref: '#/components/responses/AcceptedNeutral' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /auth/password-reset/confirm:
+    post:
+      tags: [auth]
+      operationId: confirmPasswordReset
+      summary: Definir nova senha com o código recebido
+      description: Encerra todas as sessões existentes do usuário.
+      security: []
+      x-acceptance-criteria: [AC-010.1, AC-005.1, AC-005.2, AC-001.3]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PasswordResetConfirmRequest' }
+      responses:
+        '204': { description: Senha alterada }
+        '400': { $ref: '#/components/responses/InvalidCode' }
+        '410': { $ref: '#/components/responses/CodeExpiredOrExhausted' }
+
+  # ──────────────────────── convite (público) ────────────────────────
+  /invitations/redeem:
+    post:
+      tags: [invitations-public]
+      operationId: redeemInvitation
+      summary: Validar e-mail + código de convite ("Tenho um código de convite")
+      description: |
+        Passo 1 de 2. Com e-mail e código corretos, devolve um `registrationToken` de 15 minutos
+        e os dados para montar o formulário (e-mail travado e nome do idoso).
+      security: []
+      x-acceptance-criteria: [AC-003.2, AC-003.3, AC-004.1, AC-004.2, AC-004.5]
+      x-decisions: [D-16, R-03]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RedeemInvitationRequest' }
+      responses:
+        '200':
+          description: Código válido
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RedeemInvitationResponse' }
+        '400': { $ref: '#/components/responses/InvalidCode' }
+        '410':
+          description: Convite expirado, cancelado, já usado ou invalidado por tentativas (AC-004.5)
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/InvitationUnavailableProblem' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /invitations/register:
+    post:
+      tags: [invitations-public]
+      operationId: registerWithInvitation
+      summary: Concluir o cadastro do convidado
+      description: |
+        Passo 2 de 2. Cria o usuário, vincula ao grupo automaticamente e deixa o pedido em
+        `AGUARDANDO_APROVACAO` com prazo de 24 h. Dispara o e-mail ao Responsável (AC-006.7).
+        A resposta traz o prazo para a tela exibir o aviso de AC-004.4.
+      security: []
+      x-acceptance-criteria: [AC-004.2, AC-004.3, AC-004.4, AC-006.7, AC-001.3, AC-011.1, AC-011.2]
+      x-decisions: [D-16, D-23, D-25]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegisterWithInvitationRequest' }
+      responses:
+        '201':
+          description: Pedido de acesso criado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AccessRequestCreated' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401':
+          description: '`registrationToken` inválido ou expirado; é preciso refazer o passo 1'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  # ─────────────────────────────── me ───────────────────────────────
+  /me:
+    get:
+      tags: [me]
+      operationId: getMe
+      summary: Dados do usuário logado e do seu vínculo
+      x-acceptance-criteria: [AC-011.6]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Me' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    put:
+      tags: [me]
+      operationId: updateMe
+      summary: Atualizar o próprio telefone e endereço
+      x-acceptance-criteria: [AC-011.6, AC-011.1, AC-011.2]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateMeRequest' }
+      responses:
+        '200':
+          description: Atualizado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Me' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  # ───────────────────────────── elders ─────────────────────────────
+  /elders:
+    post:
+      tags: [elders]
+      operationId: createElder
+      summary: Cadastrar o idoso do grupo (Responsável, uma única vez)
+      x-acceptance-criteria: [AC-001.2, AC-002.1, AC-002.2, AC-002.5, AC-011.1, AC-011.2]
+      x-decisions: [D-25, D-26]
+      x-required-permission: admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ElderInput' }
+      responses:
+        '201':
+          description: Idoso cadastrado
+          headers:
+            Location:
+              schema: { type: string, example: /api/v1/elders/7b2e... }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Elder' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: O grupo já tem um idoso (AC-002.1)
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /elders/{elderId}:
+    parameters:
+      - $ref: '#/components/parameters/ElderId'
+    get:
+      tags: [elders]
+      operationId: getElder
+      summary: Ver os dados do idoso (qualquer membro ativo)
+      x-acceptance-criteria: [AC-002.3, AC-011.7]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Elder' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [elders]
+      operationId: updateElder
+      summary: Editar os dados do idoso (Responsável)
+      description: Substitui os dados, inclusive a lista completa de contatos de emergência.
+      x-acceptance-criteria: [AC-002.2, AC-002.3, AC-002.5, AC-011.1, AC-011.2]
+      x-required-permission: admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ElderInput' }
+      responses:
+        '200':
+          description: Atualizado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Elder' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /elders/{elderId}/photo:
+    parameters:
+      - $ref: '#/components/parameters/ElderId'
+    put:
+      tags: [elders]
+      operationId: uploadElderPhoto
+      summary: Enviar/substituir a foto do idoso (Responsável)
+      x-acceptance-criteria: [AC-002.2]
+      x-required-permission: admin
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  contentMediaType: image/jpeg
+                  description: JPEG ou PNG, até 5 MB
+      responses:
+        '200':
+          description: Foto salva
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Elder' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '413':
+          description: Arquivo maior que 5 MB
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+    delete:
+      tags: [elders]
+      operationId: deleteElderPhoto
+      summary: Remover a foto do idoso (Responsável)
+      x-required-permission: admin
+      responses:
+        '204': { description: Foto removida }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  # ─────────────────────────── invitations ───────────────────────────
+  /elders/{elderId}/invitations:
+    parameters:
+      - $ref: '#/components/parameters/ElderId'
+    get:
+      tags: [invitations]
+      operationId: listInvitations
+      summary: Listar convites (Responsável)
+      x-acceptance-criteria: [AC-003.4]
+      x-required-permission: admin
+      parameters:
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/InvitationStatus' }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InvitationPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [invitations]
+      operationId: createInvitation
+      summary: Convidar uma pessoa por e-mail (Responsável)
+      description: |
+        Envia o código de 6 dígitos (válido por 7 dias) ao e-mail informado. Se já existir um
+        convite `ENVIADO` para o mesmo e-mail, ele é cancelado e substituído.
+      x-acceptance-criteria: [AC-002.4, AC-003.1, AC-003.2, AC-003.5]
+      x-decisions: [D-04, D-23]
+      x-required-permission: admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmailOnly' }
+      responses:
+        '201':
+          description: Convite enviado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Invitation' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: E-mail já é membro ativo do grupo (AC-003.5)
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /elders/{elderId}/invitations/{invitationId}/resend:
+    parameters:
+      - $ref: '#/components/parameters/ElderId'
+      - $ref: '#/components/parameters/InvitationId'
+    post:
+      tags: [invitations]
+      operationId: resendInvitation
+      summary: Reenviar convite com código novo (invalida o anterior)
+      x-acceptance-criteria: [AC-003.3, AC-003.4]
+      x-required-permission: admin
+      responses:
+        '200':
+          description: Novo código enviado; validade reiniciada em 7 dias
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Invitation' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Convite já usado; não pode ser reenviado
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /elders/{elderId}/invitations/{invitationId}/cancel:
+    parameters:
+      - $ref: '#/components/parameters/ElderId'
+      - $ref: '#/components/parameters/InvitationId'
+    post:
+      tags: [invitations]
+      operationId: cancelInvitation
+      summary: Cancelar convite
+      x-acceptance-criteria: [AC-003.4]
+      x-required-permission: admin
+      responses:
+        '200':
+          description: Convite cancelado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Invitation' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Convite já usado; não pode ser cancelado
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  # ───────────────────────────── members ─────────────────────────────
+  /elders/{elderId}/members:
+    parameters:
+      - $ref: '#/components/parameters/ElderId'
+    get:
+      tags: [members]
+      operationId: listMembers
+      summary: Listar membros e pedidos de acesso
+      description: |
+        Qualquer membro ativo lista membros `ATIVO`. Os demais status (pedidos pendentes,
+        recusados etc.) só aparecem para o Responsável.
+        O campo `address` de cada membro segue a matriz de AC-011.5 e vem **ausente** quando
+        quem consulta não pode vê-lo.
+      x-acceptance-criteria: [AC-006.2, AC-011.5]
+      x-decisions: [D-28]
+      parameters:
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/MembershipStatus' }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MemberPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /elders/{elderId}/members/pending-count:
+    parameters:
+      - $ref: '#/components/parameters/ElderId'
+    get:
+      tags: [members]
+      operationId: getPendingCount
+      summary: Quantidade de pedidos aguardando aprovação (badge)
+      x-acceptance-criteria: [AC-006.1]
+      x-decisions: [D-17, D-21]
+      x-required-permission: admin
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [count]
+                properties:
+                  count: { type: integer, minimum: 0, example: 2 }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /elders/{elderId}/members/{memberId}:
+    parameters:
+      - $ref: '#/components/parameters/ElderId'
+      - $ref: '#/components/parameters/MemberId'
+    patch:
+      tags: [members]
+      operationId: changeMemberRole
+      summary: Alterar o papel de um membro ativo entre Cuidador e Familiar
+      x-acceptance-criteria: [AC-009.1, AC-009.4]
+      x-decisions: [D-08, D-29]
+      x-required-permission: admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ChangeRoleRequest' }
+      responses:
+        '200':
+          description: Papel alterado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Member' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/MemberConflict' }
+    delete:
+      tags: [members]
+      operationId: removeMember
+      summary: Remover um membro (encerra as sessões dele na hora)
+      x-acceptance-criteria: [AC-009.2, AC-009.3, AC-009.4]
+      x-decisions: [D-13]
+      x-required-permission: admin
+      responses:
+        '204': { description: Membro removido; histórico preservado }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/MemberConflict' }
+
+  /elders/{elderId}/members/{memberId}/approve:
+    parameters:
+      - $ref: '#/components/parameters/ElderId'
+      - $ref: '#/components/parameters/MemberId'
+    post:
+      tags: [members]
+      operationId: approveMember
+      summary: Aprovar pedido de acesso escolhendo o papel
+      x-acceptance-criteria: [AC-006.3, AC-006.5, AC-006.6, AC-007.1]
+      x-decisions: [D-07, D-08, D-09, D-23]
+      x-required-permission: admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ApproveRequest' }
+      responses:
+        '200':
+          description: Aprovado; a pessoa recebe e-mail
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Member' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/MemberConflict' }
+        '410': { $ref: '#/components/responses/RequestExpired' }
+
+  /elders/{elderId}/members/{memberId}/reject:
+    parameters:
+      - $ref: '#/components/parameters/ElderId'
+      - $ref: '#/components/parameters/MemberId'
+    post:
+      tags: [members]
+      operationId: rejectMember
+      summary: Recusar pedido de acesso
+      x-acceptance-criteria: [AC-006.4, AC-006.6, AC-007.1, AC-007.2]
+      x-decisions: [D-07, D-08, D-23]
+      x-required-permission: admin
+      responses:
+        '200':
+          description: Recusado; a pessoa recebe e-mail
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Member' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/MemberConflict' }
+        '410': { $ref: '#/components/responses/RequestExpired' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Access token de 15 minutos, mantido apenas em memória no frontend (D-11, D-12)
+    refreshCookie:
+      type: apiKey
+      in: cookie
+      name: refresh_token
+      description: Refresh token opaco, 7 dias renovados a cada uso, HttpOnly/Secure/SameSite=Strict
+
+  parameters:
+    ElderId:
+      name: elderId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    MemberId:
+      name: memberId
+      in: path
+      required: true
+      description: Id do vínculo (membership), não do usuário
+      schema: { type: string, format: uuid }
+    InvitationId:
+      name: invitationId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 0, default: 0 }
+    Size:
+      name: size
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+
+  responses:
+    AcceptedNeutral:
+      description: |
+        Pedido aceito. Resposta idêntica em qualquer caso, para não revelar se o e-mail existe (P5).
+    SessionStarted:
+      description: Sessão iniciada ou renovada
+      headers:
+        Set-Cookie:
+          description: '`refresh_token=<opaco>; Max-Age=604800; Path=/api/v1/auth; HttpOnly; Secure; SameSite=Strict`'
+          schema: { type: string }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/AccessToken' }
+    ValidationError:
+      description: Dados inválidos
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/ValidationProblem' }
+    InvalidCode:
+      description: Código incorreto. Informa quantas tentativas restam.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/InvalidCodeProblem' }
+    CodeExpiredOrExhausted:
+      description: Código expirado ou invalidado após 5 tentativas; é preciso pedir outro
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    TooManyRequests:
+      description: Muitas requisições; tente de novo depois do tempo indicado
+      headers:
+        Retry-After:
+          schema: { type: integer, description: segundos }
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Unauthorized:
+      description: Sem sessão válida
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Forbidden:
+      description: 'Sessão válida, mas sem permissão (por exemplo: não é administrador)'
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    NotFound:
+      description: Recurso inexistente ou de outro grupo (não revela qual dos dois)
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    MemberConflict:
+      description: |
+        Conflito: pedido já decidido por outra ação simultânea (D-08), membro alvo é o
+        Responsável (AC-009.4) ou transição inválida para o status atual.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    RequestExpired:
+      description: O pedido passou das 24 h e expirou (AC-006.5)
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+
+  schemas:
+    # ───────── tipos básicos ─────────
+    Email:
+      type: string
+      format: email
+      maxLength: 254
+    Phone:
+      type: string
+      description: DDD + número, só dígitos
+      pattern: '^\d{10,11}$'
+      example: '21987654321'
+    Password:
+      type: string
+      description: Mínimo 8 caracteres, com pelo menos uma letra e um número (AC-001.3)
+      minLength: 8
+      maxLength: 128
+      pattern: '^(?=.*[A-Za-z])(?=.*\d).+$'
+      writeOnly: true
+    OtpCode:
+      type: string
+      pattern: '^\d{6}$'
+      example: '482913'
+    PersonName:
+      type: string
+      minLength: 2
+      maxLength: 120
+    Role:
+      type: string
+      enum: [CUIDADOR, FAMILIAR]
+      description: Papel base. O Responsável é FAMILIAR com `isAdmin = true` (Constitution §3, D-29)
+    MembershipStatus:
+      type: string
+      enum: [AGUARDANDO_CONFIRMACAO_EMAIL, AGUARDANDO_APROVACAO, ATIVO, RECUSADO, EXPIRADO, REMOVIDO]
+    InvitationStatus:
+      type: string
+      enum: [ENVIADO, USADO, EXPIRADO, CANCELADO]
+    UF:
+      type: string
+      enum: [AC, AL, AP, AM, BA, CE, DF, ES, GO, MA, MT, MS, MG, PA, PB, PR, PE, PI, RJ, RN, RS, RO, RR, SC, SP, SE, TO]
+
+    Address:
+      type: object
+      description: Objeto de valor reaproveitado por usuário, idoso e contatos (AC-011, D-25)
+      required: [zipCode, street, number, district, city, state]
+      properties:
+        zipCode:
+          type: string
+          description: 8 dígitos, sem máscara (AC-011.2)
+          pattern: '^\d{8}$'
+          example: '22041001'
+        street: { type: string, minLength: 1, maxLength: 150, example: Rua Barata Ribeiro }
+        number:
+          type: string
+          description: Número ou "S/N" (AC-011.1)
+          pattern: '^(\d{1,6}[A-Za-z]?|S/N)$'
+          example: '370'
+        complement: { type: [string, 'null'], maxLength: 80, example: Apto 802 }
+        district: { type: string, minLength: 1, maxLength: 80, example: Copacabana }
+        city: { type: string, minLength: 1, maxLength: 80, example: Rio de Janeiro }
+        state: { $ref: '#/components/schemas/UF' }
+
+    # ───────── auth ─────────
+    SignupRequest:
+      type: object
+      required: [name, email, phone, address, password]
+      properties:
+        name: { $ref: '#/components/schemas/PersonName' }
+        email: { $ref: '#/components/schemas/Email' }
+        phone: { $ref: '#/components/schemas/Phone' }
+        address: { $ref: '#/components/schemas/Address' }
+        password: { $ref: '#/components/schemas/Password' }
+    VerifyEmailRequest:
+      type: object
+      required: [email, code]
+      properties:
+        email: { $ref: '#/components/schemas/Email' }
+        code: { $ref: '#/components/schemas/OtpCode' }
+    ResendCodeRequest:
+      type: object
+      required: [email, purpose]
+      properties:
+        email: { $ref: '#/components/schemas/Email' }
+        purpose:
+          type: string
+          enum: [EMAIL_VERIFICATION, PASSWORD_RESET]
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { $ref: '#/components/schemas/Email' }
+        password: { type: string, writeOnly: true }
+    EmailOnly:
+      type: object
+      required: [email]
+      properties:
+        email: { $ref: '#/components/schemas/Email' }
+    PasswordResetConfirmRequest:
+      type: object
+      required: [email, code, newPassword]
+      properties:
+        email: { $ref: '#/components/schemas/Email' }
+        code: { $ref: '#/components/schemas/OtpCode' }
+        newPassword: { $ref: '#/components/schemas/Password' }
+    AccessToken:
+      type: object
+      required: [accessToken, tokenType, expiresIn]
+      properties:
+        accessToken: { type: string }
+        tokenType: { type: string, const: Bearer }
+        expiresIn: { type: integer, description: segundos, example: 900 }
+
+    # ───────── convite (público) ─────────
+    RedeemInvitationRequest:
+      type: object
+      required: [email, code]
+      properties:
+        email: { $ref: '#/components/schemas/Email' }
+        code: { $ref: '#/components/schemas/OtpCode' }
+    RedeemInvitationResponse:
+      type: object
+      required: [registrationToken, expiresIn, email, elderName]
+      properties:
+        registrationToken: { type: string, description: Válido por 15 minutos (D-16) }
+        expiresIn: { type: integer, example: 900 }
+        email: { $ref: '#/components/schemas/Email' }
+        elderName: { type: string, example: Maria Aparecida }
+    RegisterWithInvitationRequest:
+      type: object
+      required: [registrationToken, name, phone, address, password]
+      properties:
+        registrationToken: { type: string }
+        name: { $ref: '#/components/schemas/PersonName' }
+        phone: { $ref: '#/components/schemas/Phone' }
+        address: { $ref: '#/components/schemas/Address' }
+        password: { $ref: '#/components/schemas/Password' }
+    AccessRequestCreated:
+      type: object
+      required: [status, approvalDeadline]
+      properties:
+        status: { type: string, const: AGUARDANDO_APROVACAO }
+        approvalDeadline:
+          type: string
+          format: date-time
+          description: Momento em que o pedido expira (24 h). Usado no aviso de AC-004.4.
+
+    # ───────── me ─────────
+    Me:
+      type: object
+      required: [userId, name, email, phone, address, membership]
+      properties:
+        userId: { type: string, format: uuid }
+        name: { type: string }
+        email: { $ref: '#/components/schemas/Email' }
+        phone: { $ref: '#/components/schemas/Phone' }
+        address: { $ref: '#/components/schemas/Address' }
+        membership:
+          type: object
+          required: [id, role, isAdmin, status]
+          properties:
+            id: { type: string, format: uuid }
+            elderId:
+              type: [string, 'null']
+              format: uuid
+              description: Nulo enquanto o Responsável ainda não cadastrou o idoso (AC-002.4)
+            role: { $ref: '#/components/schemas/Role' }
+            isAdmin: { type: boolean }
+            status: { $ref: '#/components/schemas/MembershipStatus' }
+    UpdateMeRequest:
+      type: object
+      required: [phone, address]
+      properties:
+        phone: { $ref: '#/components/schemas/Phone' }
+        address: { $ref: '#/components/schemas/Address' }
+
+    # ───────── elders ─────────
+    EmergencyContact:
+      type: object
+      required: [name, relationship, phone, address]
+      properties:
+        name: { $ref: '#/components/schemas/PersonName' }
+        relationship: { type: string, minLength: 1, maxLength: 40, example: Filha }
+        phone: { $ref: '#/components/schemas/Phone' }
+        address: { $ref: '#/components/schemas/Address' }
+    ElderInput:
+      type: object
+      required: [name, birthDate, address]
+      properties:
+        name: { $ref: '#/components/schemas/PersonName' }
+        birthDate: { type: string, format: date, example: '1941-03-12' }
+        address: { $ref: '#/components/schemas/Address' }
+        allergies: { type: [string, 'null'], maxLength: 1000 }
+        conditions: { type: [string, 'null'], maxLength: 2000 }
+        emergencyContacts:
+          type: array
+          maxItems: 10
+          items: { $ref: '#/components/schemas/EmergencyContact' }
+          default: []
+    Elder:
+      allOf:
+        - $ref: '#/components/schemas/ElderInput'
+        - type: object
+          required: [id, emergencyContacts, updatedAt]
+          properties:
+            id: { type: string, format: uuid }
+            photoUrl: { type: [string, 'null'], format: uri }
+            updatedAt: { type: string, format: date-time }
+
+    # ───────── invitations ─────────
+    Invitation:
+      type: object
+      required: [id, email, status, expiresAt, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        email: { $ref: '#/components/schemas/Email' }
+        status: { $ref: '#/components/schemas/InvitationStatus' }
+        expiresAt: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
+        usedAt: { type: [string, 'null'], format: date-time }
+    InvitationPage:
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/Invitation' }
+
+    # ───────── members ─────────
+    Member:
+      type: object
+      required: [id, userId, name, email, phone, role, isAdmin, status]
+      properties:
+        id: { type: string, format: uuid, description: Id do vínculo (membership) }
+        userId: { type: string, format: uuid }
+        name: { type: string }
+        email: { $ref: '#/components/schemas/Email' }
+        phone: { $ref: '#/components/schemas/Phone' }
+        role: { $ref: '#/components/schemas/Role' }
+        isAdmin: { type: boolean }
+        status: { $ref: '#/components/schemas/MembershipStatus' }
+        address:
+          $ref: '#/components/schemas/Address'
+          description: Ausente quando quem consulta não pode vê-lo (AC-011.5, D-28)
+        requestedAt: { type: [string, 'null'], format: date-time }
+        approvalDeadline:
+          type: [string, 'null']
+          format: date-time
+          description: Preenchido enquanto AGUARDANDO_APROVACAO; o frontend calcula o tempo restante (AC-006.2)
+        decidedAt: { type: [string, 'null'], format: date-time }
+        version:
+          type: integer
+          description: Versão para lock otimista (D-08); reenviada em ApproveRequest
+    MemberPage:
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/Member' }
+    ApproveRequest:
+      type: object
+      required: [role, version]
+      properties:
+        role: { $ref: '#/components/schemas/Role' }
+        version: { type: integer, description: Valor de `Member.version` que o Responsável viu }
+    ChangeRoleRequest:
+      type: object
+      required: [role]
+      properties:
+        role: { $ref: '#/components/schemas/Role' }
+
+    PageMeta:
+      type: object
+      required: [page, size, totalItems, totalPages]
+      properties:
+        page: { type: integer }
+        size: { type: integer }
+        totalItems: { type: integer }
+        totalPages: { type: integer }
+
+    # ───────── erros (RFC 9457) ─────────
+    Problem:
+      type: object
+      description: Problem Details (RFC 9457). Nunca contém dados de saúde (P5).
+      required: [type, title, status]
+      properties:
+        type: { type: string, format: uri-reference, example: /problems/forbidden }
+        title: { type: string, example: Acesso negado }
+        status: { type: integer, example: 403 }
+        detail: { type: string }
+        instance: { type: string, format: uri-reference }
+        code:
+          type: string
+          description: Código estável para o frontend escolher a mensagem
+          example: NOT_ADMIN
+    ValidationProblem:
+      allOf:
+        - $ref: '#/components/schemas/Problem'
+        - type: object
+          required: [errors]
+          properties:
+            errors:
+              type: array
+              items:
+                type: object
+                required: [field, message]
+                properties:
+                  field: { type: string, example: address.zipCode }
+                  message: { type: string, example: CEP deve ter 8 dígitos }
+    InvalidCodeProblem:
+      allOf:
+        - $ref: '#/components/schemas/Problem'
+        - type: object
+          required: [remainingAttempts]
+          properties:
+            remainingAttempts: { type: integer, minimum: 0, maximum: 4 }
+    MembershipBlockedProblem:
+      allOf:
+        - $ref: '#/components/schemas/Problem'
+        - type: object
+          properties:
+            code:
+              type: string
+              enum: [AWAITING_EMAIL_CONFIRMATION, AWAITING_APPROVAL, REJECTED, EXPIRED, REMOVED]
+    LockedProblem:
+      allOf:
+        - $ref: '#/components/schemas/Problem'
+        - type: object
+          required: [lockedUntil]
+          properties:
+            lockedUntil: { type: string, format: date-time }
+    InvitationUnavailableProblem:
+      allOf:
+        - $ref: '#/components/schemas/Problem'
+        - type: object
+          properties:
+            code:
+              type: string
+              enum: [INVITATION_EXPIRED, INVITATION_CANCELLED, INVITATION_USED, INVITATION_EXHAUSTED]
