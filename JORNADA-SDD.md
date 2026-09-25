@@ -10,21 +10,20 @@
  ┌──────────────┐  ┌──────────┐      ┌──────┐   ┌──────┐   ┌──────────┐   ┌───────┐   ┌───────────┐   ┌─────────┐
  │ Constitution │→ │ Roadmap  │  →   │ Spec │ → │ Plan │ → │ Contrato │ → │ Tasks │ → │ Implement │ → │ Validar │
  └──────────────┘  └──────────┘      └──────┘   └──────┘   └──────────┘   └───────┘   └───────────┘   └─────────┘
-       ✔ v1.3          ✔                ✔ r17      ▶          ↻ 27 ops     ↻ 47 tarefas    aguarda
+       ✔ v1.3          ✔                ✔ r17      ✔ r2       ✔ v0.2.0     ▶ 58 tarefas          ↻ 27 ops     ↻ 47 tarefas    aguarda
                                       └──────────── o QUÊ ───────┘└──────── o COMO ────────┘└──── o CÓDIGO ─────┘
 ```
 
-**Feature atual:** 000 Fundação. **Próxima etapa:** revisar plan, contrato e tasks contra a spec rev. 17 (↻)
-antes da Fase 0 do `tasks.md`.
+**Feature atual:** 000 Fundação. **Próxima etapa:** aprovar o `tasks.md` rev. 2 e começar a Fase 0.
 
 | Artefato | Arquivo | Responde | Status |
 |---|---|---|---|
 | Constitution | `specs/constitution.md` | Quais regras valem para tudo? | ✔ v1.3 |
 | Roadmap | `specs/roadmap.md` | Em que ordem, e o que depende do quê? | ✔ 9 features |
 | Spec | `specs/000-fundacao/spec.md` | **O quê** e **por quê**? | ✔ rev. 17, 12 histórias, 85 ACs, 0 dúvidas (`revisor-spec`: 3 rodadas + conferência, 31 dúvidas, todas respondidas) |
-| Plan | `specs/000-fundacao/plan.md` | **Como**? | ✔ 32 decisões (D-01…D-32) |
-| Contrato | `specs/000-fundacao/contracts/openapi.yaml` | Qual é o acordo exato entre front e back? | ✔ 27 operações, validado com Redocly |
-| Tasks | `specs/000-fundacao/tasks.md` | Em que passos pequenos e verificáveis? | ✔ 47 tarefas em 7 fases |
+| Plan | `specs/000-fundacao/plan.md` | **Como**? | ✔ rev. 2, 42 decisões (D-01…D-42), aprovado |
+| Contrato | `specs/000-fundacao/contracts/openapi.yaml` | Qual é o acordo exato entre front e back? | ✔ v0.2.0, 29 operações, validado com Redocly, 85/85 ACs rastreados |
+| Tasks | `specs/000-fundacao/tasks.md` | Em que passos pequenos e verificáveis? | ▶ rev. 2, 58 tarefas em 7 fases, em aprovação |
 | Código + testes | `backend/`, `frontend/` | Funciona conforme a spec? | ▶ próximo |
 
 ## 2. O que cada etapa ensinou (com exemplos deste projeto)

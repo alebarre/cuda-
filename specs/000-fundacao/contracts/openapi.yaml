@@ -1,32 +1,46 @@
 openapi: 3.1.0
 info:
   title: Cuida+ API — Feature 000 Fundação
-  version: 0.1.0
+  version: 0.2.0
   description: |
     Contrato da feature 000 (grupo de cuidado, convites, aprovação e acesso).
 
-    - Spec: `specs/000-fundacao/spec.md` rev. 9
-    - Plan: `specs/000-fundacao/plan.md`
-    - Constitution: v1.2
+    - Spec: `specs/000-fundacao/spec.md` rev. 17
+    - Plan: `specs/000-fundacao/plan.md` rev. 2
+    - Constitution: v1.3
 
     Rastreabilidade: cada operação traz `x-acceptance-criteria` (ACs da spec que ela atende)
     e, quando houver, `x-decisions` (decisões do plan). Um teste de contrato deve falhar se o
-    backend divergir deste arquivo.
+    backend divergir deste arquivo. Os ACs que não passam por nenhuma operação (regras de
+    domínio, jobs, e-mails e telas) estão em `x-acceptance-criteria-outside-contract`, para o
+    script de rastreabilidade (tasks T-071) saber onde procurar a prova.
 
     Convenções (Constitution §5): JSON em camelCase, datas ISO-8601 com fuso, erros em
-    Problem Details (RFC 9457), rotas de rotina sob `/elders/{elderId}`.
+    Problem Details (RFC 9457) com `code` estável (D-40), rotas de rotina sob `/elders/{elderId}`.
+
+    Regras transversais (AC-015, D-32): recurso de **outro grupo** ou **inexistente** responde
+    `404` idêntico (AC-015.3); ação **do próprio grupo** que o papel não permite responde `403`
+    com `code: NOT_ALLOWED` (AC-015.2). Toda operação autenticada exige conta em estado `ATIVO`
+    com vínculo ativo, salvo indicação (`x-required-account-state`).
+  x-acceptance-criteria-cross-cutting: [AC-008.3, AC-009.1, AC-009.2, AC-015.2, AC-015.3]
+  x-acceptance-criteria-outside-contract:
+    domain-state-tables: [AC-003.10, AC-012.1]
+    scheduled-jobs: [AC-001.5, AC-003.3, AC-003.11, AC-006.5, AC-014.1, AC-014.2, AC-014.3]
+    emails: [AC-007.1, AC-007.2, AC-013.3]
+    frontend-only: [AC-001.7, AC-011.3, AC-011.4, AC-012.2, AC-013.1, AC-015.1]
+    care-records-future-features: [AC-002.9, AC-009.3]
 servers:
   - url: /api/v1
 
 tags:
   - name: auth
-    description: Criação do grupo, confirmação de e-mail, login, sessão e senha
+    description: Criação da conta do Responsável, confirmação de e-mail, login, sessão e senha
   - name: invitations-public
     description: Uso do código de convite pelo convidado (sem login)
   - name: me
-    description: Dados do próprio usuário
+    description: Dados e estado do próprio usuário
   - name: elders
-    description: Idoso e contatos de emergência
+    description: Idoso, contatos de emergência e exclusão do grupo
   - name: invitations
     description: Gestão de convites pelo Responsável
   - name: members
@@ -41,11 +55,12 @@ paths:
     post:
       tags: [auth]
       operationId: signup
-      summary: Criar grupo de cuidado (cadastro do futuro Responsável)
+      summary: Criar conta para "Criar grupo de cuidado" (futuro Responsável)
       description: |
-        Cria a conta em `AGUARDANDO_CONFIRMACAO_EMAIL` e envia o código por e-mail.
-        A resposta é **sempre 202**, exista ou não o e-mail (AC-001.4). Se o e-mail já existir,
-        nenhuma conta é criada e nenhum dado é revelado.
+        Cria a conta em `AGUARDANDO_CONFIRMACAO_EMAIL` e envia o código por e-mail. A tela mostra
+        o aviso de 24 h de AC-001.1. A resposta é **sempre 202**, exista ou não o e-mail
+        (AC-001.4): se já existir, nenhuma conta é criada e o dono do e-mail recebe um aviso.
+        Uma conta não confirmada em 24 h é descartada sem e-mail (AC-001.5, job de D-09).
       security: []
       x-acceptance-criteria: [AC-001.1, AC-001.3, AC-001.4, AC-011.1, AC-011.2]
       x-decisions: [D-15, D-25]
@@ -62,13 +77,13 @@ paths:
     post:
       tags: [auth]
       operationId: verifyEmail
-      summary: Confirmar e-mail do criador do grupo
+      summary: Confirmar e-mail do criador
       description: |
-        Com o código correto, o criador vira `ATIVO`, Familiar administrador (Responsável),
-        e já recebe a sessão para seguir ao cadastro do idoso (AC-001.2).
+        Com o código correto a conta passa a `ATIVO` **sem grupo** e recebe a sessão para seguir
+        ao cadastro do idoso (AC-001.2). O grupo só nasce em `POST /elders` (D-05).
       security: []
       x-acceptance-criteria: [AC-001.2, AC-005.1, AC-005.2]
-      x-decisions: [D-04, D-05, D-11]
+      x-decisions: [D-04, D-05, D-11, D-33]
       requestBody:
         required: true
         content:
@@ -84,8 +99,10 @@ paths:
       tags: [auth]
       operationId: resendCode
       summary: Reenviar código (confirmação de e-mail ou redefinição de senha)
+      description: Resposta neutra (AC-001.6, AC-010.2); no máximo 1 envio por minuto (AC-005.3).
       security: []
-      x-acceptance-criteria: [AC-005.3, AC-010.2]
+      x-acceptance-criteria: [AC-001.6, AC-005.3, AC-010.2]
+      x-decisions: [D-15]
       requestBody:
         required: true
         content:
@@ -100,9 +117,15 @@ paths:
       tags: [auth]
       operationId: login
       summary: Entrar com e-mail e senha
+      description: |
+        `401` é a resposta única para e-mail inexistente, senha errada **e** conta bloqueada por
+        5 senhas erradas (AC-008.4, P5): o bloqueio nunca é revelado; o dono recebe um e-mail
+        quando o bloqueio começa. As mensagens por estado (`403`) só saem com senha correta
+        (AC-008.2). Conta `ATIVO` sem grupo entra normalmente e o frontend a leva ao cadastro
+        do idoso (AC-001.7, `GET /me/account`).
       security: []
       x-acceptance-criteria: [AC-008.1, AC-008.2, AC-008.4]
-      x-decisions: [D-11, D-12, D-14]
+      x-decisions: [D-11, D-12, D-14, D-15, D-33]
       requestBody:
         required: true
         content:
@@ -111,22 +134,17 @@ paths:
       responses:
         '200': { $ref: '#/components/responses/SessionStarted' }
         '401':
-          description: E-mail ou senha incorretos (mensagem única, não revela qual)
+          description: E-mail ou senha inválidos (mensagem única; também durante o bloqueio de AC-008.4)
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }
         '403':
           description: |
-            Credenciais corretas, mas a pessoa não pode entrar. O `code` indica o motivo
-            e o frontend exibe a mensagem de AC-008.2.
+            Senha correta, mas a conta não está `ATIVO`. O `code` indica o estado e o frontend
+            exibe a mensagem de AC-008.2 (ou leva à confirmação do e-mail).
           content:
             application/problem+json:
-              schema: { $ref: '#/components/schemas/MembershipBlockedProblem' }
-        '423':
-          description: Login bloqueado por 15 minutos após 5 senhas erradas (AC-008.4)
-          content:
-            application/problem+json:
-              schema: { $ref: '#/components/schemas/LockedProblem' }
+              schema: { $ref: '#/components/schemas/AccountStateProblem' }
 
   /auth/refresh:
     post:
@@ -135,11 +153,11 @@ paths:
       summary: Renovar a sessão com o refresh token (cookie)
       description: |
         Lê o cookie `refresh_token`, devolve um novo access token e **rotaciona** o cookie
-        (nova validade de 7 dias). Reapresentar um refresh token já usado revoga a família
-        inteira de tokens.
+        (nova validade de 7 dias, sem passar do teto absoluto de 30 dias desde a entrada,
+        AC-008.3). Reapresentar um refresh token já usado revoga a família inteira de tokens.
       security:
         - refreshCookie: []
-      x-acceptance-criteria: [AC-008.3, AC-009.2]
+      x-acceptance-criteria: [AC-008.3]
       x-decisions: [D-11, D-12, D-13]
       responses:
         '200': { $ref: '#/components/responses/SessionStarted' }
@@ -149,7 +167,9 @@ paths:
     post:
       tags: [auth]
       operationId: logout
-      summary: Sair (revoga o refresh token e limpa o cookie)
+      summary: Sair (revoga o refresh token deste aparelho e limpa o cookie)
+      x-acceptance-criteria: [AC-008.5]
+      x-required-account-state: any
       responses:
         '204':
           description: Sessão encerrada
@@ -166,6 +186,7 @@ paths:
       summary: Pedir código para redefinir a senha
       security: []
       x-acceptance-criteria: [AC-010.1, AC-010.2]
+      x-decisions: [D-15]
       requestBody:
         required: true
         content:
@@ -181,16 +202,19 @@ paths:
       tags: [auth]
       operationId: confirmPasswordReset
       summary: Definir nova senha com o código recebido
-      description: Encerra todas as sessões existentes do usuário.
+      description: |
+        Vale para qualquer conta existente e não altera o estado dela (AC-010.5). Encerra todas
+        as sessões (AC-010.4).
       security: []
-      x-acceptance-criteria: [AC-010.1, AC-005.1, AC-005.2, AC-001.3]
+      x-acceptance-criteria: [AC-010.1, AC-010.3, AC-010.4, AC-010.5, AC-005.1, AC-005.2, AC-001.3]
+      x-decisions: [D-37]
       requestBody:
         required: true
         content:
           application/json:
             schema: { $ref: '#/components/schemas/PasswordResetConfirmRequest' }
       responses:
-        '204': { description: Senha alterada }
+        '204': { description: Senha alterada; todas as sessões encerradas }
         '400': { $ref: '#/components/responses/InvalidCode' }
         '410': { $ref: '#/components/responses/CodeExpiredOrExhausted' }
 
@@ -201,11 +225,20 @@ paths:
       operationId: redeemInvitation
       summary: Validar e-mail + código de convite ("Tenho um código de convite")
       description: |
-        Passo 1 de 2. Com e-mail e código corretos, devolve um `registrationToken` de 15 minutos
-        e os dados para montar o formulário (e-mail travado e nome do idoso).
+        Passo 1 de 2. Com e-mail e código corretos:
+        - e-mail **sem conta** → `next: REGISTER` com `registrationToken` de 15 min e os dados
+          do formulário (AC-004.2);
+        - e-mail com conta `RECUSADO`/`EXPIRADO`/`REMOVIDO` no grupo → `next: REINSTATED`: a
+          conta volta para `AGUARDANDO_APROVACAO` com os dados e a senha antigos (AC-004.6).
+
+        Código errado ou e-mail sem convite → `400` idêntico com `remainingAttempts` (AC-004.7).
+        Na 5ª tentativa errada e nos 30 minutos seguintes → `423` com `blockedUntil`, para
+        qualquer tentativa, mesmo com o código certo (AC-004.7). Ao fim do bloqueio o backend
+        pode reenviar o convite sozinho (AC-003.3). Convite `VENCIDO`/`CANCELADO`/`USADO` com
+        código conferido → `410` (AC-004.5).
       security: []
-      x-acceptance-criteria: [AC-003.2, AC-003.3, AC-004.1, AC-004.2, AC-004.5]
-      x-decisions: [D-16, R-03]
+      x-acceptance-criteria: [AC-003.2, AC-004.1, AC-004.2, AC-004.5, AC-004.6, AC-004.7]
+      x-decisions: [D-16, D-34, R-03]
       requestBody:
         required: true
         content:
@@ -217,12 +250,17 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/RedeemInvitationResponse' }
-        '400': { $ref: '#/components/responses/InvalidCode' }
+        '400': { $ref: '#/components/responses/InvalidInviteCode' }
         '410':
-          description: Convite expirado, cancelado, já usado ou invalidado por tentativas (AC-004.5)
+          description: Convite vencido, cancelado ou já usado (AC-004.5)
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/InvitationUnavailableProblem' }
+        '423':
+          description: E-mail bloqueado por 30 minutos após 5 tentativas erradas (AC-004.7)
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/InviteBlockedProblem' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
 
   /invitations/register:
@@ -231,9 +269,9 @@ paths:
       operationId: registerWithInvitation
       summary: Concluir o cadastro do convidado
       description: |
-        Passo 2 de 2. Cria o usuário, vincula ao grupo automaticamente e deixa o pedido em
-        `AGUARDANDO_APROVACAO` com prazo de 24 h. Dispara o e-mail ao Responsável (AC-006.7).
-        A resposta traz o prazo para a tela exibir o aviso de AC-004.4.
+        Passo 2 de 2 (só quando `next` foi `REGISTER`). Cria o usuário, vincula ao grupo
+        automaticamente e deixa o pedido em `AGUARDANDO_APROVACAO` com prazo de 24 h. Dispara o
+        e-mail ao Responsável (AC-006.7). A resposta traz o prazo para o aviso de AC-004.4.
       security: []
       x-acceptance-criteria: [AC-004.2, AC-004.3, AC-004.4, AC-006.7, AC-001.3, AC-011.1, AC-011.2]
       x-decisions: [D-16, D-23, D-25]
@@ -260,8 +298,9 @@ paths:
     get:
       tags: [me]
       operationId: getMe
-      summary: Dados do usuário logado e do seu vínculo
+      summary: Dados do usuário logado e do seu vínculo (se houver)
       x-acceptance-criteria: [AC-011.6]
+      x-required-account-state: any
       responses:
         '200':
           description: OK
@@ -274,6 +313,7 @@ paths:
       operationId: updateMe
       summary: Atualizar o próprio telefone e endereço
       x-acceptance-criteria: [AC-011.6, AC-011.1, AC-011.2]
+      x-required-account-state: any
       requestBody:
         required: true
         content:
@@ -288,15 +328,37 @@ paths:
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
 
+  /me/account:
+    get:
+      tags: [me]
+      operationId: getMyAccountState
+      summary: Estado da conta (para os guards do frontend)
+      description: |
+        Devolve o estado derivado de AC-012.1 (D-33). O frontend prende a conta `ATIVO` sem
+        idoso na rota de cadastro do idoso (AC-001.7, D-20).
+      x-acceptance-criteria: [AC-001.7, AC-012.1]
+      x-decisions: [D-20, D-33]
+      x-required-account-state: any
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AccountState' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
   # ───────────────────────────── elders ─────────────────────────────
   /elders:
     post:
       tags: [elders]
       operationId: createElder
-      summary: Cadastrar o idoso do grupo (Responsável, uma única vez)
-      x-acceptance-criteria: [AC-001.2, AC-002.1, AC-002.2, AC-002.5, AC-011.1, AC-011.2]
-      x-decisions: [D-25, D-26]
-      x-required-permission: admin
+      summary: Cadastrar o idoso e, com ele, criar o grupo (criador ATIVO sem grupo)
+      description: |
+        Numa única transação cria o grupo, o idoso e o vínculo do criador como Familiar
+        administrador (Responsável) (AC-001.2, AC-002.1, D-05). Só uma vez por conta.
+      x-acceptance-criteria: [AC-001.2, AC-002.1, AC-002.2, AC-002.5, AC-002.7, AC-002.8, AC-011.1, AC-011.2]
+      x-decisions: [D-05, D-25, D-26, D-36]
+      x-required-account-state: active-without-group
       requestBody:
         required: true
         content:
@@ -304,7 +366,7 @@ paths:
             schema: { $ref: '#/components/schemas/ElderInput' }
       responses:
         '201':
-          description: Idoso cadastrado
+          description: Idoso cadastrado e grupo criado
           headers:
             Location:
               schema: { type: string, example: /api/v1/elders/7b2e... }
@@ -315,7 +377,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '409':
-          description: O grupo já tem um idoso (AC-002.1)
+          description: A conta já pertence a um grupo (AC-002.1, D-02)
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }
@@ -340,8 +402,11 @@ paths:
       tags: [elders]
       operationId: updateElder
       summary: Editar os dados do idoso (Responsável)
-      description: Substitui os dados, inclusive a lista completa de contatos de emergência.
-      x-acceptance-criteria: [AC-002.2, AC-002.3, AC-002.5, AC-011.1, AC-011.2]
+      description: |
+        Substitui os dados, inclusive a lista completa de contatos de emergência. Não gera
+        histórico (AC-002.9).
+      x-acceptance-criteria: [AC-002.2, AC-002.3, AC-002.5, AC-002.7, AC-002.8, AC-011.1, AC-011.2]
+      x-decisions: [D-36]
       x-required-permission: admin
       requestBody:
         required: true
@@ -358,6 +423,24 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [elders]
+      operationId: deleteCareGroup
+      summary: Excluir o grupo de cuidado inteiro (Responsável)
+      description: |
+        Grupo e idoso são 1:1 (AC-002.1), por isso a exclusão do grupo é o `DELETE` do idoso
+        (D-18, D-38). Apaga idoso, contatos, registros de cuidado, convites e **todas as contas
+        do grupo, inclusive a do Responsável** (AC-013.2); todos recebem e-mail (AC-013.3). A
+        confirmação explícita de AC-013.1 é responsabilidade da tela. A sessão de quem chamou
+        deixa de existir.
+      x-acceptance-criteria: [AC-013.2, AC-013.3, AC-013.4, AC-013.5]
+      x-decisions: [D-35, D-38, D-23]
+      x-required-permission: admin
+      responses:
+        '204': { description: Grupo excluído; sessão encerrada }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   /elders/{elderId}/photo:
     parameters:
@@ -365,8 +448,9 @@ paths:
     put:
       tags: [elders]
       operationId: uploadElderPhoto
-      summary: Enviar/substituir a foto do idoso (Responsável)
-      x-acceptance-criteria: [AC-002.2]
+      summary: Enviar/substituir a única foto do idoso (Responsável)
+      x-acceptance-criteria: [AC-002.6]
+      x-decisions: [D-30]
       x-required-permission: admin
       requestBody:
         required: true
@@ -379,18 +463,24 @@ paths:
                 file:
                   type: string
                   contentMediaType: image/jpeg
-                  description: JPEG ou PNG, até 5 MB
+                  description: JPEG ou PNG, até 5 MB (AC-002.6)
       responses:
         '200':
-          description: Foto salva
+          description: Foto salva (substitui a anterior)
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Elder' }
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
         '413':
           description: Arquivo maior que 5 MB
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '415':
+          description: Formato diferente de JPEG ou PNG
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }
@@ -398,11 +488,13 @@ paths:
       tags: [elders]
       operationId: deleteElderPhoto
       summary: Remover a foto do idoso (Responsável)
+      x-acceptance-criteria: [AC-002.6]
       x-required-permission: admin
       responses:
         '204': { description: Foto removida }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   # ─────────────────────────── invitations ───────────────────────────
   /elders/{elderId}/invitations:
@@ -411,8 +503,9 @@ paths:
     get:
       tags: [invitations]
       operationId: listInvitations
-      summary: Listar convites (Responsável)
-      x-acceptance-criteria: [AC-003.4]
+      summary: Listar convites com tentativas e bloqueio (Responsável)
+      x-acceptance-criteria: [AC-003.4, AC-003.8]
+      x-decisions: [D-34, D-39]
       x-required-permission: admin
       parameters:
         - name: status
@@ -428,15 +521,19 @@ paths:
               schema: { $ref: '#/components/schemas/InvitationPage' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
     post:
       tags: [invitations]
       operationId: createInvitation
       summary: Convidar uma pessoa por e-mail (Responsável)
       description: |
-        Envia o código de 6 dígitos (válido por 7 dias) ao e-mail informado. Se já existir um
-        convite `ENVIADO` para o mesmo e-mail, ele é cancelado e substituído.
-      x-acceptance-criteria: [AC-002.4, AC-003.1, AC-003.2, AC-003.5]
-      x-decisions: [D-04, D-23]
+        Envia o código de 6 dígitos (vence em 7 dias) com o nome do Responsável e o primeiro
+        nome do idoso (AC-003.1). Se já existir um convite `ENVIADO` para o e-mail, ele é
+        cancelado e substituído (AC-003.12). Um convite novo zera as tentativas do e-mail e
+        encerra qualquer bloqueio (AC-003.9, AC-003.11). E-mail com conta `RECUSADO`/`EXPIRADO`/
+        `REMOVIDO` no grupo pode ser convidado (AC-003.6).
+      x-acceptance-criteria: [AC-002.4, AC-003.1, AC-003.2, AC-003.5, AC-003.6, AC-003.7, AC-003.9, AC-003.12]
+      x-decisions: [D-04, D-23, D-31]
       x-required-permission: admin
       requestBody:
         required: true
@@ -452,11 +549,16 @@ paths:
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
         '409':
-          description: E-mail já é membro ativo do grupo (AC-003.5)
+          description: |
+            `code` diz o motivo e o frontend mostra a mensagem da spec:
+            `ALREADY_MEMBER` (membro ativo ou pedido em análise, AC-003.5),
+            `EMAIL_UNAVAILABLE` (e-mail de outro grupo ou conta sem grupo, AC-003.7, mensagem
+            única para os dois casos), `NO_ELDER` (grupo sem idoso, AC-002.4).
           content:
             application/problem+json:
-              schema: { $ref: '#/components/schemas/Problem' }
+              schema: { $ref: '#/components/schemas/InvitationConflictProblem' }
 
   /elders/{elderId}/invitations/{invitationId}/resend:
     parameters:
@@ -465,12 +567,17 @@ paths:
     post:
       tags: [invitations]
       operationId: resendInvitation
-      summary: Reenviar convite com código novo (invalida o anterior)
-      x-acceptance-criteria: [AC-003.3, AC-003.4]
+      summary: Reenviar convite (cria um convite novo com código e prazo novos)
+      description: |
+        Permitido para `ENVIADO`, `VENCIDO` e `CANCELADO`. Cria um convite novo com zero
+        tentativas; o anterior, se `ENVIADO`, passa a `CANCELADO` (AC-003.4). Encerra o bloqueio
+        do e-mail (AC-003.9). Não zera o limite de 3 reenvios automáticos (AC-003.3).
+      x-acceptance-criteria: [AC-003.4, AC-003.9]
+      x-decisions: [D-31, D-34]
       x-required-permission: admin
       responses:
-        '200':
-          description: Novo código enviado; validade reiniciada em 7 dias
+        '201':
+          description: Novo convite criado e enviado
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Invitation' }
@@ -478,7 +585,7 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409':
-          description: Convite já usado; não pode ser reenviado
+          description: 'Convite `USADO`; não pode ser reenviado (`code` = `INVITATION_USED`)'
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }
@@ -490,7 +597,7 @@ paths:
     post:
       tags: [invitations]
       operationId: cancelInvitation
-      summary: Cancelar convite
+      summary: Cancelar convite ENVIADO
       x-acceptance-criteria: [AC-003.4]
       x-required-permission: admin
       responses:
@@ -503,7 +610,7 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409':
-          description: Convite já usado; não pode ser cancelado
+          description: 'Convite não está `ENVIADO`; não pode ser cancelado (`code` = `INVITATION_NOT_CANCELLABLE`)'
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }
@@ -517,15 +624,18 @@ paths:
       operationId: listMembers
       summary: Listar membros e pedidos de acesso
       description: |
-        Qualquer membro ativo lista membros `ATIVO`. Os demais status (pedidos pendentes,
-        recusados etc.) só aparecem para o Responsável.
-        O campo `address` de cada membro segue a matriz de AC-011.5 e vem **ausente** quando
-        quem consulta não pode vê-lo.
-      x-acceptance-criteria: [AC-006.2, AC-011.5]
-      x-decisions: [D-28]
+        Sem `status`, devolve só membros `ATIVO`, para qualquer membro ativo. O filtro `status`
+        é aceito **apenas do Responsável** (AC-006.2, AC-006.9, AC-009.5); para os demais
+        responde `403`. Pedidos `AGUARDANDO_APROVACAO` cujo prazo já venceu não aparecem, mesmo
+        antes do job marcá-los `EXPIRADO` (AC-006.2, D-09).
+        `address`, `phone` e `email` seguem a matriz de AC-011.5/AC-011.8 e vêm **ausentes**
+        quando quem consulta não pode vê-los (D-28).
+      x-acceptance-criteria: [AC-006.2, AC-006.9, AC-009.5, AC-011.5, AC-011.8]
+      x-decisions: [D-09, D-28, D-39]
       parameters:
         - name: status
           in: query
+          description: Só para o Responsável
           schema: { $ref: '#/components/schemas/MembershipStatus' }
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/Size'
@@ -537,6 +647,7 @@ paths:
               schema: { $ref: '#/components/schemas/MemberPage' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   /elders/{elderId}/members/pending-count:
     parameters:
@@ -560,6 +671,7 @@ paths:
                   count: { type: integer, minimum: 0, example: 2 }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   /elders/{elderId}/members/{memberId}:
     parameters:
@@ -568,9 +680,9 @@ paths:
     patch:
       tags: [members]
       operationId: changeMemberRole
-      summary: Alterar o papel de um membro ativo entre Cuidador e Familiar
+      summary: Alterar o papel de um membro ativo (vale imediatamente)
       x-acceptance-criteria: [AC-009.1, AC-009.4]
-      x-decisions: [D-08, D-29]
+      x-decisions: [D-08, D-13, D-29]
       x-required-permission: admin
       requestBody:
         required: true
@@ -579,7 +691,7 @@ paths:
             schema: { $ref: '#/components/schemas/ChangeRoleRequest' }
       responses:
         '200':
-          description: Papel alterado
+          description: Papel alterado; sessões abertas já veem o novo papel (D-13)
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Member' }
@@ -590,12 +702,12 @@ paths:
     delete:
       tags: [members]
       operationId: removeMember
-      summary: Remover um membro (encerra as sessões dele na hora)
-      x-acceptance-criteria: [AC-009.2, AC-009.3, AC-009.4]
+      summary: Remover um membro (encerra as sessões dele na hora; dados ficam guardados)
+      x-acceptance-criteria: [AC-009.2, AC-009.4, AC-014.2]
       x-decisions: [D-13]
       x-required-permission: admin
       responses:
-        '204': { description: Membro removido; histórico preservado }
+        '204': { description: 'Membro removido; histórico e dados preservados, visíveis só ao Responsável' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -609,7 +721,7 @@ paths:
       tags: [members]
       operationId: approveMember
       summary: Aprovar pedido de acesso escolhendo o papel
-      x-acceptance-criteria: [AC-006.3, AC-006.5, AC-006.6, AC-007.1]
+      x-acceptance-criteria: [AC-006.3, AC-006.6, AC-006.8, AC-007.1]
       x-decisions: [D-07, D-08, D-09, D-23]
       x-required-permission: admin
       requestBody:
@@ -638,8 +750,8 @@ paths:
       tags: [members]
       operationId: rejectMember
       summary: Recusar pedido de acesso
-      x-acceptance-criteria: [AC-006.4, AC-006.6, AC-007.1, AC-007.2]
-      x-decisions: [D-07, D-08, D-23]
+      x-acceptance-criteria: [AC-006.4, AC-006.6, AC-006.8, AC-007.1, AC-007.2]
+      x-decisions: [D-07, D-08, D-09, D-23]
       x-required-permission: admin
       responses:
         '200':
@@ -659,12 +771,14 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
-      description: Access token de 15 minutos, mantido apenas em memória no frontend (D-11, D-12)
+      description: |
+        Access token de 15 minutos, mantido apenas em memória no frontend (D-11, D-12). Não
+        carrega papel nem estado: o backend os lê do banco a cada requisição (D-13).
     refreshCookie:
       type: apiKey
       in: cookie
       name: refresh_token
-      description: Refresh token opaco, 7 dias renovados a cada uso, HttpOnly/Secure/SameSite=Strict
+      description: Refresh token opaco, 7 dias renovados a cada uso, teto de 30 dias, HttpOnly/Secure/SameSite=Strict
 
   parameters:
     ElderId:
@@ -711,12 +825,19 @@ components:
         application/problem+json:
           schema: { $ref: '#/components/schemas/ValidationProblem' }
     InvalidCode:
-      description: Código incorreto. Informa quantas tentativas restam.
+      description: Código de confirmação incorreto. Informa quantas tentativas restam (AC-005.2).
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/InvalidCodeProblem' }
+    InvalidInviteCode:
+      description: |
+        E-mail ou código de convite inválidos (mensagem única, exista convite ou não, AC-004.7).
+        `remainingAttempts` de 4 a 1; na 5ª tentativa errada a resposta é `423`.
       content:
         application/problem+json:
           schema: { $ref: '#/components/schemas/InvalidCodeProblem' }
     CodeExpiredOrExhausted:
-      description: Código expirado ou invalidado após 5 tentativas; é preciso pedir outro
+      description: Código expirado (15 min) ou invalidado após 5 tentativas; é preciso pedir outro (AC-005)
       content:
         application/problem+json:
           schema: { $ref: '#/components/schemas/Problem' }
@@ -729,29 +850,32 @@ components:
         application/problem+json:
           schema: { $ref: '#/components/schemas/Problem' }
     Unauthorized:
-      description: Sem sessão válida
+      description: Sem sessão válida (ou conta/vínculo que deixou de existir)
       content:
         application/problem+json:
           schema: { $ref: '#/components/schemas/Problem' }
     Forbidden:
-      description: 'Sessão válida, mas sem permissão (por exemplo: não é administrador)'
+      description: |
+        Sessão válida, mas a ação sobre um recurso do próprio grupo não é permitida ao papel
+        (`code: NOT_ALLOWED`, mensagem de AC-015.2), ou a conta não está no estado exigido
+        (`code: ACCOUNT_STATE`).
       content:
         application/problem+json:
           schema: { $ref: '#/components/schemas/Problem' }
     NotFound:
-      description: Recurso inexistente ou de outro grupo (não revela qual dos dois)
+      description: Recurso inexistente ou de outro grupo; resposta idêntica nos dois casos (AC-015.3)
       content:
         application/problem+json:
           schema: { $ref: '#/components/schemas/Problem' }
     MemberConflict:
       description: |
         Conflito: pedido já decidido por outra ação simultânea (D-08), membro alvo é o
-        Responsável (AC-009.4) ou transição inválida para o status atual.
+        Responsável (AC-009.4) ou transição inválida para o status atual (AC-012.1).
       content:
         application/problem+json:
           schema: { $ref: '#/components/schemas/Problem' }
     RequestExpired:
-      description: O pedido passou das 24 h e expirou (AC-006.5)
+      description: 'O pedido passou das 24 h (`code` = `REQUEST_EXPIRED`, mensagem de AC-006.8)'
       content:
         application/problem+json:
           schema: { $ref: '#/components/schemas/Problem' }
@@ -788,10 +912,20 @@ components:
       description: Papel base. O Responsável é FAMILIAR com `isAdmin = true` (Constitution §3, D-29)
     MembershipStatus:
       type: string
-      enum: [AGUARDANDO_CONFIRMACAO_EMAIL, AGUARDANDO_APROVACAO, ATIVO, RECUSADO, EXPIRADO, REMOVIDO]
+      description: Status do vínculo com o grupo (AC-012.1). Estados sem vínculo estão em AccountStateValue.
+      enum: [AGUARDANDO_APROVACAO, ATIVO, RECUSADO, EXPIRADO, REMOVIDO]
+    AccountStateValue:
+      type: string
+      description: Estado derivado da conta (AC-012.1, D-33)
+      enum: [AGUARDANDO_CONFIRMACAO_EMAIL, ATIVO, AGUARDANDO_APROVACAO, RECUSADO, EXPIRADO, REMOVIDO]
     InvitationStatus:
       type: string
-      enum: [ENVIADO, USADO, EXPIRADO, CANCELADO]
+      description: Status do convite (AC-003.10). `VENCIDO` é do convite; `EXPIRADO` é só de conta.
+      enum: [ENVIADO, USADO, VENCIDO, CANCELADO]
+    InvitationOrigin:
+      type: string
+      description: Como o convite nasceu (D-34)
+      enum: [MANUAL, AUTO]
     UF:
       type: string
       enum: [AC, AL, AP, AM, BA, CE, DF, ES, GO, MA, MT, MS, MG, PA, PB, PR, PE, PI, RJ, RN, RS, RO, RR, SC, SP, SE, TO]
@@ -876,12 +1010,25 @@ components:
         code: { $ref: '#/components/schemas/OtpCode' }
     RedeemInvitationResponse:
       type: object
-      required: [registrationToken, expiresIn, email, elderName]
+      required: [next, email, elderFirstName]
       properties:
-        registrationToken: { type: string, description: Válido por 15 minutos (D-16) }
-        expiresIn: { type: integer, example: 900 }
+        next:
+          type: string
+          enum: [REGISTER, REINSTATED]
+          description: '`REGISTER`: seguir ao formulário (AC-004.2). `REINSTATED`: conta já existia e voltou a AGUARDANDO_APROVACAO (AC-004.6); mostrar o aviso de AC-004.4.'
+        registrationToken:
+          type: [string, 'null']
+          description: Só quando `next = REGISTER`; válido por 15 minutos (D-16)
+        expiresIn: { type: [integer, 'null'], example: 900 }
         email: { $ref: '#/components/schemas/Email' }
-        elderName: { type: string, example: Maria Aparecida }
+        elderFirstName:
+          type: string
+          example: Maria
+          description: Primeiro nome do idoso (AC-003.1, AC-004.2)
+        approvalDeadline:
+          type: [string, 'null']
+          format: date-time
+          description: Só quando `next = REINSTATED`; prazo de 24 h do pedido renovado (AC-004.6)
     RegisterWithInvitationRequest:
       type: object
       required: [registrationToken, name, phone, address, password]
@@ -912,17 +1059,24 @@ components:
         phone: { $ref: '#/components/schemas/Phone' }
         address: { $ref: '#/components/schemas/Address' }
         membership:
-          type: object
-          required: [id, role, isAdmin, status]
+          type: [object, 'null']
+          description: Nulo enquanto a conta não pertence a um grupo (criador que ainda não cadastrou o idoso, AC-001.7)
+          required: [id, elderId, role, isAdmin, status]
           properties:
             id: { type: string, format: uuid }
-            elderId:
-              type: [string, 'null']
-              format: uuid
-              description: Nulo enquanto o Responsável ainda não cadastrou o idoso (AC-002.4)
+            elderId: { type: string, format: uuid }
             role: { $ref: '#/components/schemas/Role' }
             isAdmin: { type: boolean }
             status: { $ref: '#/components/schemas/MembershipStatus' }
+    AccountState:
+      type: object
+      required: [state, hasGroup, isAdmin]
+      properties:
+        state: { $ref: '#/components/schemas/AccountStateValue' }
+        hasGroup: { type: boolean, description: Falso para o criador que ainda não cadastrou o idoso (AC-001.7) }
+        elderId: { type: [string, 'null'], format: uuid }
+        role: { oneOf: [{ $ref: '#/components/schemas/Role' }, { type: 'null' }] }
+        isAdmin: { type: boolean }
     UpdateMeRequest:
       type: object
       required: [phone, address]
@@ -944,10 +1098,14 @@ components:
       required: [name, birthDate, address]
       properties:
         name: { $ref: '#/components/schemas/PersonName' }
-        birthDate: { type: string, format: date, example: '1941-03-12' }
+        birthDate:
+          type: string
+          format: date
+          example: '1941-03-12'
+          description: Data válida do calendário e não futura (AC-002.7). A tela usa dd/mm/aaaa; a API usa ISO.
         address: { $ref: '#/components/schemas/Address' }
-        allergies: { type: [string, 'null'], maxLength: 1000 }
-        conditions: { type: [string, 'null'], maxLength: 2000 }
+        allergies: { type: [string, 'null'], maxLength: 500, description: Texto livre (AC-002.8) }
+        conditions: { type: [string, 'null'], maxLength: 500, description: Texto livre (AC-002.8) }
         emergencyContacts:
           type: array
           maxItems: 10
@@ -960,20 +1118,36 @@ components:
           required: [id, emergencyContacts, updatedAt]
           properties:
             id: { type: string, format: uuid }
-            photoUrl: { type: [string, 'null'], format: uri }
+            photoUrl: { type: [string, 'null'], format: uri, description: Única foto do idoso (AC-002.6) }
             updatedAt: { type: string, format: date-time }
 
     # ───────── invitations ─────────
     Invitation:
       type: object
-      required: [id, email, status, expiresAt, createdAt]
+      required: [id, email, status, origin, expiresAt, createdAt, failedAttempts]
       properties:
         id: { type: string, format: uuid }
         email: { $ref: '#/components/schemas/Email' }
         status: { $ref: '#/components/schemas/InvitationStatus' }
-        expiresAt: { type: string, format: date-time }
+        origin: { $ref: '#/components/schemas/InvitationOrigin' }
+        expiresAt: { type: string, format: date-time, description: Vence em 7 dias (AC-003.2) }
         createdAt: { type: string, format: date-time }
         usedAt: { type: [string, 'null'], format: date-time }
+        cancelledAt: { type: [string, 'null'], format: date-time }
+        failedAttempts:
+          type: integer
+          minimum: 0
+          maximum: 5
+          description: Tentativas erradas acumuladas para o e-mail (AC-003.8, AC-003.11)
+        blockedUntil:
+          type: [string, 'null']
+          format: date-time
+          description: Preenchido enquanto o e-mail está bloqueado (AC-003.8)
+        autoResends:
+          type: integer
+          minimum: 0
+          maximum: 3
+          description: Reenvios automáticos já feitos para o e-mail sem uso do código (AC-003.3)
     InvitationPage:
       allOf:
         - $ref: '#/components/schemas/PageMeta'
@@ -987,13 +1161,17 @@ components:
     # ───────── members ─────────
     Member:
       type: object
-      required: [id, userId, name, email, phone, role, isAdmin, status]
+      required: [id, userId, name, role, isAdmin, status]
       properties:
         id: { type: string, format: uuid, description: Id do vínculo (membership) }
         userId: { type: string, format: uuid }
         name: { type: string }
-        email: { $ref: '#/components/schemas/Email' }
-        phone: { $ref: '#/components/schemas/Phone' }
+        email:
+          $ref: '#/components/schemas/Email'
+          description: Ausente quando quem consulta não pode vê-lo (AC-011.8, D-28)
+        phone:
+          $ref: '#/components/schemas/Phone'
+          description: Ausente quando quem consulta não pode vê-lo (AC-011.8, D-28)
         role: { $ref: '#/components/schemas/Role' }
         isAdmin: { type: boolean }
         status: { $ref: '#/components/schemas/MembershipStatus' }
@@ -1042,18 +1220,20 @@ components:
     # ───────── erros (RFC 9457) ─────────
     Problem:
       type: object
-      description: Problem Details (RFC 9457). Nunca contém dados de saúde (P5).
+      description: |
+        Problem Details (RFC 9457). Nunca contém dados de saúde (P5). `code` é estável e o
+        frontend o traduz para o texto exato da spec pelo catálogo de mensagens (D-40).
       required: [type, title, status]
       properties:
-        type: { type: string, format: uri-reference, example: /problems/forbidden }
-        title: { type: string, example: Acesso negado }
+        type: { type: string, format: uri-reference, example: /problems/not-allowed }
+        title: { type: string, example: Ação não permitida }
         status: { type: integer, example: 403 }
         detail: { type: string }
         instance: { type: string, format: uri-reference }
         code:
           type: string
-          description: Código estável para o frontend escolher a mensagem
-          example: NOT_ADMIN
+          description: Código estável para o frontend escolher a mensagem (D-40)
+          example: NOT_ALLOWED
     ValidationProblem:
       allOf:
         - $ref: '#/components/schemas/Problem'
@@ -1075,26 +1255,42 @@ components:
           required: [remainingAttempts]
           properties:
             remainingAttempts: { type: integer, minimum: 0, maximum: 4 }
-    MembershipBlockedProblem:
+    AccountStateProblem:
       allOf:
         - $ref: '#/components/schemas/Problem'
         - type: object
+          required: [code]
           properties:
             code:
               type: string
               enum: [AWAITING_EMAIL_CONFIRMATION, AWAITING_APPROVAL, REJECTED, EXPIRED, REMOVED]
-    LockedProblem:
+    InviteBlockedProblem:
       allOf:
         - $ref: '#/components/schemas/Problem'
         - type: object
-          required: [lockedUntil]
+          required: [code, blockedUntil]
           properties:
-            lockedUntil: { type: string, format: date-time }
+            code: { type: string, const: INVITE_CODE_BLOCKED }
+            blockedUntil:
+              type: string
+              format: date-time
+              description: Fim do bloqueio de 30 min; o frontend mostra o contador regressivo (AC-004.7, D-41)
     InvitationUnavailableProblem:
       allOf:
         - $ref: '#/components/schemas/Problem'
         - type: object
+          required: [code]
           properties:
             code:
               type: string
-              enum: [INVITATION_EXPIRED, INVITATION_CANCELLED, INVITATION_USED, INVITATION_EXHAUSTED]
+              description: '`INVITATION_EXPIRED` = status VENCIDO'
+              enum: [INVITATION_EXPIRED, INVITATION_CANCELLED, INVITATION_USED]
+    InvitationConflictProblem:
+      allOf:
+        - $ref: '#/components/schemas/Problem'
+        - type: object
+          required: [code]
+          properties:
+            code:
+              type: string
+              enum: [ALREADY_MEMBER, EMAIL_UNAVAILABLE, NO_ELDER]
