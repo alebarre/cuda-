@@ -1,7 +1,8 @@
 # Tasks 000 — Fundação
 
 - **Spec:** rev. 17 · **Plan:** rev. 2 (D-01…D-42) · **Contrato:** `contracts/openapi.yaml` 0.2.0
-- **Status:** rev. 2, revisado contra spec rev. 17 e plan rev. 2; aguardando aprovação
+- **Status:** rev. 2, revisado contra spec rev. 17 e plan rev. 2; **aprovado por Alexandre em
+  2026-09-25**, pronto para implementação
 - **Histórico:** rev. 1 (47 tarefas, spec rev. 9). Rev. 2 mantém os IDs existentes, atualiza o
   conteúdo de quase todas e acrescenta T-017, T-018, T-019, T-027, T-028, T-033, T-034, T-048,
   T-049, T-061, T-062 (58 tarefas).
