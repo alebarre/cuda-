@@ -14,7 +14,8 @@
                                       └──────────── o QUÊ ───────┘└──────── o COMO ────────┘└──── o CÓDIGO ─────┘
 ```
 
-**Feature atual:** 000 Fundação. **Próxima etapa:** implementação, começando pela Fase 0 do `tasks.md` (T-001).
+**Feature atual:** 000 Fundação. **Próxima etapa:** Fase 0 em andamento (T-001 e T-002 concluídas); próxima é a T-003, a base
+de testes de integração com Testcontainers.
 
 | Artefato | Arquivo | Responde | Status |
 |---|---|---|---|

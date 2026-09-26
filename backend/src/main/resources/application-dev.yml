@@ -1,0 +1,14 @@
+# Desenvolvimento local: PostgreSQL e Mailpit do docker-compose.yml (D-24).
+spring:
+  mail:
+    host: ${MAIL_HOST:localhost}
+    port: ${MAIL_PORT:1025}
+    properties:
+      mail.smtp.auth: false
+      mail.smtp.starttls.enable: false
+  jpa:
+    show-sql: false
+
+logging:
+  level:
+    br.com.cuidamais: DEBUG

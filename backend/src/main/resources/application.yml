@@ -1,0 +1,44 @@
+# Configuração comum a todos os profiles. Valores sensíveis e de máquina vêm do `.env` na raiz
+# (plan D-43): o Spring importa o arquivo como properties; o Docker Compose lê o mesmo arquivo.
+spring:
+  application:
+    name: cuida-mais
+  config:
+    import:
+      - optional:file:.env[.properties]
+      - optional:file:../.env[.properties]
+  profiles:
+    default: dev
+
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:${POSTGRES_PORT:5432}/${POSTGRES_DB:cuida}}
+    username: ${POSTGRES_USER:cuida}
+    password: ${POSTGRES_PASSWORD:cuida}
+
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate   # o esquema é do Flyway (D-06); o Hibernate só confere
+    properties:
+      hibernate:
+        jdbc.time_zone: UTC
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+  mail:
+    host: ${MAIL_HOST:localhost}
+    port: ${MAIL_PORT:1025}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+
+  jackson:
+    time-zone: America/Sao_Paulo   # exibição (Constitution §5); armazenamento em UTC
+
+server:
+  port: ${SERVER_PORT:8080}
+
+app:
+  mail:
+    from: ${MAIL_FROM:Cuida+ <nao-responda@cuidamais.local>}

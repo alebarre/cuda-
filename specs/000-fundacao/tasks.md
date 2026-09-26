@@ -26,9 +26,9 @@
 
 ## Fase 0 — Esqueleto do projeto
 
-- [ ] **T-001** `docker-compose.yml` na raiz com PostgreSQL 17 e Mailpit.
+- [x] **T-001** `docker-compose.yml` na raiz com PostgreSQL 17 e Mailpit.
   *Pronto quando:* `docker compose up` sobe os dois e a UI do Mailpit abre em `localhost:8025`.
-- [ ] **T-002** Backend Spring Boot 4.1 / Java 25 (Maven): Web, Data JPA, Security, Validation,
+- [x] **T-002** Backend Spring Boot 4.1 / Java 25 (Maven): Web, Data JPA, Security, Validation,
   Flyway, Mail, PostgreSQL. Profiles `dev`, `test`, `prod`; bean `Clock` (D-10); pacotes por
   domínio (D-01). *Pronto quando:* `mvn verify` passa com um teste de contexto.
 - [ ] **T-003** Base de teste de integração com Testcontainers (PostgreSQL + Mailpit) reutilizável

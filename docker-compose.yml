@@ -1,0 +1,46 @@
+# Ambiente local da feature 000 (tasks T-001, plan §1 e D-24).
+# Sobe o banco e o capturador de e-mails; nada sai para a internet em dev.
+#
+#   docker compose up -d
+#   PostgreSQL: localhost:5432  (db/usuário/senha padrão: cuida)
+#   Mailpit UI: http://localhost:8025   SMTP: localhost:1025
+
+name: cuida-mais
+
+services:
+  postgres:
+    image: postgres:17
+    container_name: cuida-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-cuida}
+      POSTGRES_USER: ${POSTGRES_USER:-cuida}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cuida}
+      TZ: America/Sao_Paulo
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cuida} -d ${POSTGRES_DB:-cuida}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  mailpit:
+    image: axllent/mailpit:v1.29.7
+    container_name: cuida-mailpit
+    environment:
+      TZ: America/Sao_Paulo
+      MP_SMTP_AUTH_ACCEPT_ANY: "1"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "1"
+    ports:
+      - "8025:8025"   # UI web
+      - "1025:1025"   # SMTP usado pelo profile dev do backend
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8025/livez"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  postgres-data:

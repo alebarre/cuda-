@@ -21,12 +21,14 @@
 | Node | LTS atual exigida pelo Angular 22 |
 | Build backend | Maven |
 | E-mail real | **Gmail SMTP** (`smtp.gmail.com:587`, STARTTLS) com senha de app |
-| E-mail em dev/testes | Mailpit (Docker): captura os e-mails, nada sai para a internet |
+| E-mail em dev/testes | Mailpit v1.29.7 (Docker): captura os e-mails, nada sai para a internet |
+| Testcontainers | 2.0.5 (BOM no `pom.xml`; o Boot 4 não gerencia mais a versão; módulos `testcontainers-postgresql`, `testcontainers-junit-jupiter`) |
+| Spring Boot (exato) | 4.1.1 · JDK Temurin 25.0.4.1 |
 
 ## 2. Estrutura do backend (pacotes por domínio)
 
 ```
-backend/src/main/java/.../cuida/
+backend/src/main/java/br/com/cuidamais/
 ├── shared/        (erros Problem Details, relógio, config, catálogo de mensagens)
 ├── auth/          (login, tokens, OTP, redefinição de senha, bloqueio de senha)
 ├── group/         (grupo de cuidado, idoso, exclusão do grupo)
@@ -330,3 +332,9 @@ Cada teste traz o ID do critério no nome ou comentário, por exemplo
   precisará de lock distribuído (ShedLock ou equivalente). Registrado, não implementado.
 - **D-42** Todos os jobs de D-09 são **idempotentes** e usam `SELECT ... FOR UPDATE SKIP LOCKED`
   nas linhas que processam, para que uma rodada atrasada ou repetida nunca envie e-mail em dobro.
+- **D-43** *(T-002, pedido de Alexandre)* **Todas as variáveis de ambiente ficam num único `.env`
+  na raiz**, não versionado, com modelo em `.env.example`. O Docker Compose lê o arquivo
+  nativamente; o backend o importa com `spring.config.import: optional:file:.env[.properties]`
+  (e `../.env` quando roda de `backend/`), de modo que shell, compose e Spring veem os mesmos
+  valores. Variáveis exportadas no shell têm precedência. Segredos de produção (D-24) só existem
+  no ambiente do servidor.
