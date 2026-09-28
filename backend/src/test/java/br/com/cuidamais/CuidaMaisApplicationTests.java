@@ -2,33 +2,15 @@ package br.com.cuidamais;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.time.Clock;
 import java.time.ZoneOffset;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
-import org.springframework.test.context.ActiveProfiles;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
+import br.com.cuidamais.shared.testsupport.IntegrationTest;
 
 /**
  * T-002 "Pronto quando": o contexto sobe com Web, JPA, Security, Validation, Flyway e Mail
- * configurados, contra um PostgreSQL 17 real (Testcontainers). T-003 extrai daqui a base
- * reutilizável com Mailpit e relógio ajustável.
+ * configurados, contra um PostgreSQL 17 e um Mailpit reais (base de teste do T-003).
  */
-@SpringBootTest
-@ActiveProfiles("test")
-@Testcontainers
-class CuidaMaisApplicationTests {
-
-    @Container
-    @ServiceConnection
-    static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:17");
-
-    @Autowired
-    Clock clock;
+class CuidaMaisApplicationTests extends IntegrationTest {
 
     @Test
     void contextLoads() {

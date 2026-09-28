@@ -31,10 +31,10 @@
 - [x] **T-002** Backend Spring Boot 4.1 / Java 25 (Maven): Web, Data JPA, Security, Validation,
   Flyway, Mail, PostgreSQL. Profiles `dev`, `test`, `prod`; bean `Clock` (D-10); pacotes por
   domínio (D-01). *Pronto quando:* `mvn verify` passa com um teste de contexto.
-- [ ] **T-003** Base de teste de integração com Testcontainers (PostgreSQL + Mailpit) reutilizável
+- [x] **T-003** Base de teste de integração com Testcontainers (PostgreSQL + Mailpit) reutilizável
   por todas as classes de teste, com `Clock` substituível para avançar o tempo (D-10).
   *Pronto quando:* um teste sobe os containers, roda uma migração vazia e avança o relógio.
-- [ ] **T-004** `[P]` Frontend Angular 22 standalone + signals, `@angular/pwa` só para o *app shell*
+- [x] **T-004** `[P]` Frontend Angular 22 standalone + signals, `@angular/pwa` só para o *app shell*
   (D-22), fonte base 16px e alvos ≥ 44px (P4). *Pronto quando:* `ng build` e `ng test` passam; o
   Lighthouse reconhece o app como instalável.
 - [ ] **T-005** `[P]` Geração do cliente TypeScript a partir do `openapi.yaml` 0.2.0 com script npm

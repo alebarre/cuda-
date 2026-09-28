@@ -1,5 +1,6 @@
-# Testes de integração: banco e Mailpit vêm do Testcontainers (T-003); nada aponta para a
-# máquina do desenvolvedor. O datasource é injetado por @ServiceConnection.
+# Testes de integração: banco e Mailpit vêm do Testcontainers (T-003), via
+# IntegrationTest#containerProperties (@DynamicPropertySource); nada aponta para a máquina do
+# desenvolvedor.
 spring:
   mail:
     properties:

@@ -1,0 +1,2 @@
+-- T-003: migração vazia só para os testes, prova que o Flyway roda contra o PostgreSQL do
+-- Testcontainers antes de existir schema real (V1__foundation.sql chega em T-010, D-06).
