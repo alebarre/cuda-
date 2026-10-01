@@ -6,6 +6,9 @@
 /out-tsc
 /bazel-out
 
+# Cliente da API gerado do openapi.yaml (D-19) — rode `npm run api:generate`
+/src/app/core/api
+
 # Node
 /node_modules
 npm-debug.log

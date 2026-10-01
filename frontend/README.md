@@ -44,6 +44,22 @@ To execute unit tests with the [Vitest](https://vitest.dev/) test runner, use th
 ng test
 ```
 
+## Cliente da API (gerado, não editar)
+
+O cliente TypeScript da API (`src/app/core/api/`) é gerado a partir de
+`../specs/000-fundacao/contracts/openapi.yaml` com o OpenAPI Generator
+(gerador `typescript-angular`, D-19). Ele **não** é versionado no git — é
+regenerado localmente e no CI antes de buildar/testar:
+
+```bash
+npm run api:generate
+```
+
+Rode esse comando sempre que o contrato (`openapi.yaml`) mudar, ou após um
+`git clone`/`npm install` limpo, antes de `ng serve`, `ng build` ou `ng test`.
+Nunca edite os arquivos dessa pasta manualmente; qualquer ajuste necessário
+deve ser feito no `openapi.yaml` e regerado.
+
 ## Running end-to-end tests
 
 For end-to-end (e2e) testing, run:

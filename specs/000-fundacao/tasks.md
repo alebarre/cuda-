@@ -37,7 +37,7 @@
 - [x] **T-004** `[P]` Frontend Angular 22 standalone + signals, `@angular/pwa` só para o *app shell*
   (D-22), fonte base 16px e alvos ≥ 44px (P4). *Pronto quando:* `ng build` e `ng test` passam; o
   Lighthouse reconhece o app como instalável.
-- [ ] **T-005** `[P]` Geração do cliente TypeScript a partir do `openapi.yaml` 0.2.0 com script npm
+- [x] **T-005** `[P]` Geração do cliente TypeScript a partir do `openapi.yaml` 0.2.0 com script npm
   (D-19). *Pronto quando:* `npm run api:generate` gera o cliente sem erros e ele compila.
 - [ ] **T-006** Teste de contrato: validar requisições e respostas dos testes de API contra o
   `openapi.yaml` (ex.: `swagger-request-validator` no MockMvc). *Pronto quando:* uma rota
