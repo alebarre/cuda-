@@ -52,7 +52,7 @@
 
 ## Fase 1 — Domínio e dados (sem HTTP)
 
-- [ ] **T-010** Migração `V1__foundation.sql` com todas as tabelas do plan §3 rev. 2: `user_id`
+- [x] **T-010** Migração `V1__foundation.sql` com todas as tabelas do plan §3 rev. 2: `user_id`
   UNIQUE (D-02), índice único parcial `WHERE is_admin` (D-03), `CHECK (NOT is_admin OR
   role='FAMILIAR')` (D-29), `emergency_contacts` (D-26), `invite_code_attempts` e
   `invitations.origin` (D-34), `refresh_tokens.absolute_expires_at` (D-11),
@@ -61,7 +61,7 @@
   *Pronto quando:* testes de repositório provam que o banco **recusa** dois admins no mesmo grupo,
   um Cuidador admin, alergia com 501 caracteres e nascimento futuro, e que apagar um
   `care_groups` leva idoso, contatos, memberships e convites junto.
-- [ ] **T-011** `[P]` `Endereco` como `record` `@Embeddable` com validação (D-25).
+- [x] **T-011** `[P]` `Endereco` como `record` `@Embeddable` com validação (D-25).
   ACs: 011.1, 011.2. *Pronto quando:* testes cobrem CEP com 7/8/9 dígitos, UF inválida, número
   "S/N", complemento vazio.
 - [ ] **T-012** `[P]` Entidade `Membership` com a máquina de estados (D-07): `approve(role)`,
