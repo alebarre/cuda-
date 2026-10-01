@@ -42,7 +42,7 @@
 - [x] **T-006** Teste de contrato: validar requisições e respostas dos testes de API contra o
   `openapi.yaml` (ex.: `swagger-request-validator` no MockMvc). *Pronto quando:* uma rota
   propositalmente fora do contrato faz o teste falhar.
-- [ ] **T-007** Tratamento global de erros em Problem Details (RFC 9457) com `code` estável
+- [x] **T-007** Tratamento global de erros em Problem Details (RFC 9457) com `code` estável
   (D-40) e sem dados de saúde (Constitution §5, P5); `404` idêntico para recurso inexistente ou de
   outro grupo e `403` com `code = NOT_ALLOWED` para ação vedada ao papel (D-32).
   ACs: 015.2, 015.3. *Pronto quando:* teste de validação retorna `ValidationProblem` conforme o
