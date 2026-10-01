@@ -105,6 +105,18 @@
       <artifactId>testcontainers-junit-jupiter</artifactId>
       <scope>test</scope>
     </dependency>
+
+    <!-- Teste de contrato (T-006, Constitution §6): valida requisições/respostas do MockMvc
+         contra o openapi.yaml real da feature. Sucessor do antigo "swagger-request-validator"
+         (grupo com.atlassian.oai), renomeado para "openapi-request-validator"; usa
+         io.swagger.parser.v3 2.1.x, que lê OpenAPI 3.1 com suporte parcial (ver nota no plan/
+         relatório da tarefa). -->
+    <dependency>
+      <groupId>com.atlassian.oai</groupId>
+      <artifactId>openapi-request-validator-mockmvc</artifactId>
+      <version>3.0.0</version>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
 
   <build>

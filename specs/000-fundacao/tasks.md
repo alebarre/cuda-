@@ -39,7 +39,7 @@
   Lighthouse reconhece o app como instalável.
 - [x] **T-005** `[P]` Geração do cliente TypeScript a partir do `openapi.yaml` 0.2.0 com script npm
   (D-19). *Pronto quando:* `npm run api:generate` gera o cliente sem erros e ele compila.
-- [ ] **T-006** Teste de contrato: validar requisições e respostas dos testes de API contra o
+- [x] **T-006** Teste de contrato: validar requisições e respostas dos testes de API contra o
   `openapi.yaml` (ex.: `swagger-request-validator` no MockMvc). *Pronto quando:* uma rota
   propositalmente fora do contrato faz o teste falhar.
 - [ ] **T-007** Tratamento global de erros em Problem Details (RFC 9457) com `code` estável
