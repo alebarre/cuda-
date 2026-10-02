@@ -73,12 +73,12 @@
 - [x] **T-013** `[P]` Serviço de OTP: gera 6 dígitos, guarda hash (D-04), 15 min, 5 tentativas,
   reenvio 1/min. ACs: 005.1, 005.2, 005.3. *Pronto quando:* testes com `Clock` fixo cobrem
   expiração no minuto 15, 5ª tentativa errada e reenvio antes de 60 s.
-- [ ] **T-014** `[P]` Entidade `Invitation`: código hash, vence em 7 dias, uso único, `origin`
+- [x] **T-014** `[P]` Entidade `Invitation`: código hash, vence em 7 dias, uso único, `origin`
   (`MANUAL`/`AUTO`), status `ENVIADO`/`USADO`/`VENCIDO`/`CANCELADO`; reenvio cria convite novo e
   cancela o `ENVIADO` anterior (D-31). ACs: 003.2, 003.4, 003.10, 003.12.
   *Pronto quando:* `@ParameterizedTest` com **cada linha** da tabela de AC-003.10 e um teste por
   transição inválida (ex.: cancelar `USADO`, usar `VENCIDO`).
-- [ ] **T-015** `[P]` `MemberVisibilityPolicy` (D-28) para endereço, telefone e e-mail de uma vez.
+- [x] **T-015** `[P]` `MemberVisibilityPolicy` (D-28) para endereço, telefone e e-mail de uma vez.
   ACs: 011.5, 011.8. *Pronto quando:* `@ParameterizedTest` com **cada célula** da matriz da spec,
   para os três campos.
 - [ ] **T-016** Infra de e-mail: eventos de domínio + `@TransactionalEventListener(AFTER_COMMIT)`
