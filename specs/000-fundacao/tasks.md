@@ -64,13 +64,13 @@
 - [x] **T-011** `[P]` `Endereco` como `record` `@Embeddable` com validação (D-25).
   ACs: 011.1, 011.2. *Pronto quando:* testes cobrem CEP com 7/8/9 dígitos, UF inválida, número
   "S/N", complemento vazio.
-- [ ] **T-012** `[P]` Entidade `Membership` com a máquina de estados (D-07): `approve(role)`,
+- [x] **T-012** `[P]` Entidade `Membership` com a máquina de estados (D-07): `approve(role)`,
   `reject`, `expire`, `remove`, `changeRole`, `reinstate` (reconvite, AC-004.6), com `Clock`.
   ACs: 004.3, 004.6, 006.3, 006.4, 006.5, 009.1, 009.2, 009.4, 012.1.
   *Pronto quando:* `@ParameterizedTest` com **cada linha** da tabela de AC-012.1 que envolve
   membership, mais um teste por transição inválida (ex.: aprovar expirado, remover admin,
   tornar admin um Cuidador, reinstaurar um `ATIVO`).
-- [ ] **T-013** `[P]` Serviço de OTP: gera 6 dígitos, guarda hash (D-04), 15 min, 5 tentativas,
+- [x] **T-013** `[P]` Serviço de OTP: gera 6 dígitos, guarda hash (D-04), 15 min, 5 tentativas,
   reenvio 1/min. ACs: 005.1, 005.2, 005.3. *Pronto quando:* testes com `Clock` fixo cobrem
   expiração no minuto 15, 5ª tentativa errada e reenvio antes de 60 s.
 - [ ] **T-014** `[P]` Entidade `Invitation`: código hash, vence em 7 dias, uso único, `origin`
