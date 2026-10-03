@@ -42,3 +42,7 @@ server:
 app:
   mail:
     from: ${MAIL_FROM:Cuida+ <nao-responda@cuidamais.local>}
+  jobs:
+    # T-019 (plan D-09, R-06): um único @Scheduled, a cada 5 min, numa instância só; o profile test desliga
+    enabled: ${JOBS_ENABLED:true}
+    interval: ${JOBS_INTERVAL:PT5M}   # Duration ISO-8601 (fixedDelay)

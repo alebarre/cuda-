@@ -96,11 +96,27 @@ refresh_tokens   (id, user_id → users ON DELETE CASCADE, token_hash, expires_a
   com membership → o `status` dela (`AGUARDANDO_APROVACAO`, `ATIVO`, `RECUSADO`, `EXPIRADO`,
   `REMOVIDO`). Um único método `AccountState.of(user, membership)` é a fonte da verdade, testado
   linha a linha com a tabela de AC-012.1. Evita duas colunas que poderiam divergir.
+  *Esclarecimentos registrados na T-017:* (1) **membership exige e-mail verificado**: conta sem
+  `email_verified_at` e com membership é combinação inválida e é rejeitada; por isso o `register`
+  do convidado (T-042) grava `email_verified_at` na criação, já que o código de convite comprovou
+  o e-mail (AC-004.3). (2) `hasGroup` é "existe membership", em qualquer status; "conta sem
+  grupo" é só `AGUARDANDO_CONFIRMACAO_EMAIL` ou `ATIVO` sem idoso (AC-003.7). (3) `AccountState`
+  também deriva `role` e `isAdmin`, que só valem quando o estado é `ATIVO` com vínculo; fora
+  disso `role` é nulo e `isAdmin` é falso. (4) Membership de outra conta é rejeitada.
+  (5) `elderId` não é derivável de usuário e membership; quem o resolve é a T-027.
 - **D-34** `invite_code_attempts` é o contador **por e-mail** de AC-003.11, separado de
   `invitations` porque existe mesmo sem convite (AC-004.7, P5). `failed_attempts` e
   `blocked_until` implementam o bloqueio de 30 minutos; `auto_resends` implementa o limite de 3
   de AC-003.3 e só zera quando um código daquele e-mail é usado. `invitations.origin`
   (`MANUAL`, `AUTO`) registra se o convite nasceu de reenvio automático, para auditoria e testes.
+  *Esclarecimentos registrados na T-018:* (1) a chave `email` é **normalizada** (`strip` +
+  minúsculas), e T-040/T-041 aplicam a mesma normalização ao buscar convite e contador, para que
+  mudar a caixa do e-mail não escape do bloqueio; (2) `blocked_until` **no passado** significa
+  "bloqueio terminou e o reenvio automático ainda está devido" até o job tratar (D-09 item 4);
+  por isso `GET /invitations` (D-39) lê `failedAttempts(clock)` e `blockedUntil(clock)` da
+  entidade, nunca as colunas cruas; (3) um convite criado **entre o fim do bloqueio e a rodada do
+  job** também cancela o reenvio automático; (4) código certo durante o bloqueio é recusado
+  **antes** de qualquer uso: T-041 checa `isBlocked` e responde `423` antes de conferir o código.
 - **D-35** **Toda tabela de dado do grupo, agora e nas features 001–008, aponta para
   `care_groups` ou `elders` com `ON DELETE CASCADE`.** É o que torna a exclusão do grupo
   (AC-013.2) uma única operação segura e completa. Feature futura que criar tabela sem esse
@@ -153,10 +169,15 @@ estado**: vive em `invite_code_attempts` (D-34).
      `users` verificado sem membership há 30 d → apagado com o mesmo e-mail (AC-014.3), com
      lembrete aos 23 dias registrado em `elder_reminder_sent_at`. `retention_deadline` é
      recalculado a cada convite criado para o e-mail e a cada convite que termina sem uso.
-  4. **Reenvio automático**: `invite_code_attempts` com `blocked_until` vencido e
-     `failed_attempts = 5` → zera o contador e, se há convite `ENVIADO` para o e-mail e
-     `auto_resends < 3`, cancela-o e cria outro com `origin = AUTO` (AC-003.3). Se um convite
-     manual foi criado durante o bloqueio, o contador já foi zerado (AC-003.9) e nada acontece.
+  4. **Reenvio automático**: `invite_code_attempts` com `blocked_until <= agora` (**só** esse
+     predicado; corrigido na T-018: o contador já vale zero na leitura ao fim do bloqueio, e erros
+     do ciclo novo não cancelam o reenvio devido). Para cada linha: se há convite `ENVIADO` para
+     o e-mail, `consumeAutoResend` (concede e conta até 3; o 4º é negado) e, concedido, cancela o
+     convite e cria outro com `origin = AUTO` (AC-003.3); se não há convite, `dismissAutoResend`
+     (não gasta o teto). Os dois limpam `blocked_until`. Se um convite foi criado durante o
+     bloqueio ou entre o fim dele e a rodada do job, `blocked_until` já foi limpo (AC-003.9) e a
+     linha não é selecionada. Cinco erros novos antes de o job rodar sobrescrevem `blocked_until`:
+     sai um reenvio, não dois.
 - **D-10** Um `Clock` injetável em todo lugar que usa hora, para testar prazos (15 min, 30 min,
   24 h, 7 dias, 30 dias) sem esperar.
 
@@ -217,7 +238,7 @@ estado**: vive em `invite_code_attempts` (D-34).
   AC-004.2) **ou** `next: REINSTATED` quando a conta já existe no grupo e voltou para
   `AGUARDANDO_APROVACAO` (AC-004.6). `register` usa o token. Assim o código de 6 dígitos não
   trafega de novo e as tentativas contam num lugar só (D-34). Erros de `redeem`: código errado ou
-  e-mail sem convite → `400` com `attemptsRemaining` (AC-004.7); bloqueado → `423 Locked` com
+  e-mail sem convite → `400` com `remainingAttempts` (AC-004.7); bloqueado → `423 Locked` com
   `blockedUntil` (o contador regressivo é calculado no cliente); `VENCIDO`/`CANCELADO`/`USADO`
   com código conferido → `410 Gone` com `code` próprio (AC-004.5).
 - **D-17** "Notificação no app" (AC-006.1) no MVP = o Angular consulta `pending-count` ao abrir e
@@ -311,6 +332,20 @@ Cada teste traz o ID do critério no nome ou comentário, por exemplo
   (`@TransactionalEventListener(phase = AFTER_COMMIT)`) e de forma assíncrona: uma falha no SMTP
   não desfaz o cadastro, e nunca sai e-mail de algo que não foi gravado. Para a exclusão do grupo
   (D-38) e a retenção (D-09), o evento carrega os e-mails coletados **antes** do apagamento.
+  *Esclarecimentos registrados na T-016:* (1) o listener é `@TransactionalEventListener(phase =
+  AFTER_COMMIT)` **sem** `fallbackExecution`: um `EmailEvent` publicado fora de transação é
+  **descartado**; logo, toda tarefa que publica e-mail (login, cadastro, convites, aprovação,
+  exclusão do grupo e os jobs de D-09, que já são transacionais por D-42) faz o `publishEvent`
+  **dentro** da transação de negócio. (2) O envio é assíncrono no `applicationTaskExecutor`
+  padrão do Boot (`@EnableAsync` em `notification/NotificationConfig`): fila em memória, sem
+  persistência; e-mail pendente na queda do processo é perdido (trade-off do MVP, na linha de
+  R-02). (3) Logs do listener só trazem o tipo do evento e, em falha, o tipo da exceção; nunca
+  destinatário, assunto, corpo nem a mensagem do servidor SMTP (P5). (4) `EmailEvent` é selado
+  com os 9 tipos da feature; cada record carrega só valores simples; `InvitationEmail` recebe
+  `elderFirstName`, então extrair o **primeiro** nome do idoso (AC-003.1) é obrigação do produtor
+  (T-040), e enviar **um** único `PasswordLockEmail` por bloqueio (AC-008.4) é obrigação do login
+  (T-023). (5) AC-014.1 e AC-014.3 usam um único template de exclusão **sem citar motivo**; o
+  lembrete de AC-014.3 fala em "conta", não em "grupo", porque o grupo só nasce com o idoso.
 - **D-24** Envio de e-mail pelo **Gmail** via SMTP (`spring-boot-starter-mail`). Exige verificação
   em duas etapas na conta Google e uma **senha de app**; usuário e senha vêm de variáveis de
   ambiente (`MAIL_USERNAME`, `MAIL_PASSWORD`) e **nunca** vão para o repositório. O profile `dev`
@@ -332,6 +367,19 @@ Cada teste traz o ID do critério no nome ou comentário, por exemplo
   precisará de lock distribuído (ShedLock ou equivalente). Registrado, não implementado.
 - **D-42** Todos os jobs de D-09 são **idempotentes** e usam `SELECT ... FOR UPDATE SKIP LOCKED`
   nas linhas que processam, para que uma rodada atrasada ou repetida nunca envie e-mail em dobro.
+  *Esclarecimentos registrados na T-019:* (1) a infra vive em `shared.jobs`: `ScheduledRoutine`
+  (`name()`, `run(Clock)`), `JobRunner.runAll()` (todas as rotinas, cada uma em transação
+  própria `REQUIRES_NEW`, rollback só da que falha, log com nome da rotina e tipo da exceção,
+  sem mensagem nem stack trace, P5), `SkipLockedClaimer.claim(...)` (JPQL + `PESSIMISTIC_WRITE`
+  + timeout `SKIP_LOCKED`, recusa fora de transação) e `JobScheduler` com o único `@Scheduled`,
+  `fixedDelay` de `app.jobs.interval` (padrão `PT5M`), ligado por `app.jobs.enabled` (padrão
+  `true`; o profile `test` desliga). (2) O Hibernate 7 emite `FOR NO KEY UPDATE ... SKIP LOCKED`
+  no PostgreSQL, equivalente para o fim desta decisão. (3) O limite de linhas vai na mesma
+  consulta do lock, sem follow-on locking. (4) `fixedDelay` sem `initialDelay`: a primeira rodada
+  ocorre na subida e as seguintes contam do fim da anterior, sem sobreposição na mesma instância
+  (R-06). (5) Padrão das rotinas futuras (T-028, T-034, T-046, T-048, T-049): bean
+  `ScheduledRoutine`, reivindicar linhas com o `claim` dentro de `run(Clock)` e publicar
+  `EmailEvent` dentro dessa mesma transação (D-23).
 - **D-43** *(T-002, pedido de Alexandre)* **Todas as variáveis de ambiente ficam num único `.env`
   na raiz**, não versionado, com modelo em `.env.example`. O Docker Compose lê o arquivo
   nativamente; o backend o importa com `spring.config.import: optional:file:.env[.properties]`

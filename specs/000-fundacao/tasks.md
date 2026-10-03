@@ -81,23 +81,23 @@
 - [x] **T-015** `[P]` `MemberVisibilityPolicy` (D-28) para endereço, telefone e e-mail de uma vez.
   ACs: 011.5, 011.8. *Pronto quando:* `@ParameterizedTest` com **cada célula** da matriz da spec,
   para os três campos.
-- [ ] **T-016** Infra de e-mail: eventos de domínio + `@TransactionalEventListener(AFTER_COMMIT)`
+- [x] **T-016** Infra de e-mail: eventos de domínio + `@TransactionalEventListener(AFTER_COMMIT)`
   assíncrono (D-23); templates pt-BR sem dados de saúde (P5) para: código de confirmação,
   tentativa de cadastro duplicado (001.4), convite (003.1), pedido pendente ao Responsável
   (006.7), resultado do pedido (007.1), bloqueio de senha (008.4), grupo excluído (013.3),
   lembrete e exclusão por retenção (014.1, 014.3); profile `dev`→Mailpit, `prod`→Gmail via
   variáveis de ambiente (D-24). *Pronto quando:* teste prova que (a) o e-mail chega no Mailpit
   após o commit e (b) **nenhum** e-mail sai se a transação faz rollback.
-- [ ] **T-017** `[P]` `AccountState.of(user, membership)` (D-33): estado derivado de AC-012.1 e
+- [x] **T-017** `[P]` `AccountState.of(user, membership)` (D-33): estado derivado de AC-012.1 e
   `hasGroup`. ACs: 001.7, 012.1. *Pronto quando:* um teste por estado, inclusive `ATIVO` sem
   grupo, e um teste de que nenhuma outra combinação é aceita.
-- [ ] **T-018** `[P]` `InviteCodeAttempts` (D-34): contador **por e-mail**, exista convite ou não;
+- [x] **T-018** `[P]` `InviteCodeAttempts` (D-34): contador **por e-mail**, exista convite ou não;
   5 erros → `blocked_until = agora + 30 min`; zera ao fim do bloqueio, ao criar convite para o
   e-mail e ao usar um código; `auto_resends` com teto 3 que só zera com código usado.
   ACs: 003.3, 003.9, 003.11, 004.7. *Pronto quando:* testes com `Clock` cobrem 4ª e 5ª tentativa,
   tentativa com código certo durante o bloqueio, fim dos 30 min, zeragem por convite novo e o
   4º reenvio automático negado.
-- [ ] **T-019** Infraestrutura de jobs (D-09, D-42): um `@Scheduled` a cada 5 min chamando
+- [x] **T-019** Infraestrutura de jobs (D-09, D-42): um `@Scheduled` a cada 5 min chamando
   rotinas idempotentes com `SELECT ... FOR UPDATE SKIP LOCKED` e `Clock`. *Pronto quando:* teste
   prova que duas execuções concorrentes da mesma rotina não processam a mesma linha duas vezes.
 
@@ -190,7 +190,8 @@ grupo deixa o banco vazio.
   *Pronto quando:* testes provam que e-mail sem convite e código errado recebem **bytes iguais**
   no corpo (exceto `instance`), que código errado para convite `VENCIDO` recebe 400 e não 410, e
   que o `REINSTATED` mantém a senha antiga.
-- [ ] **T-042** `POST /invitations/register` cria usuário + membership `AGUARDANDO_APROVACAO` com
+- [ ] **T-042** `POST /invitations/register` cria usuário (já com `email_verified_at` preenchido:
+  o código de convite comprovou o e-mail, AC-004.3, D-33) + membership `AGUARDANDO_APROVACAO` com
   prazo de 24 h e dispara o e-mail ao Responsável. ACs: 004.2, 004.3, 004.4, 006.7.
 - [ ] **T-043** `GET /members`: sem `status` só `ATIVO` para qualquer membro; `status` só para
   admin (403 para os demais); pendentes vencidos não aparecem; endereço, telefone e e-mail

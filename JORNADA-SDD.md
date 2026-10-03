@@ -14,8 +14,9 @@
                                       └──────────── o QUÊ ───────┘└──────── o COMO ────────┘└──── o CÓDIGO ─────┘
 ```
 
-**Feature atual:** 000 Fundação. **Próxima etapa:** Fase 0 em andamento (T-001 e T-002 concluídas); próxima é a T-003, a base
-de testes de integração com Testcontainers.
+**Feature atual:** 000 Fundação. **Próxima etapa:** Fases 0 e 1 concluídas (T-001 a T-019, **Checkpoint 1 verde**: 481 testes,
+regras de negócio provadas sem nenhum controller). Próxima é a Fase 2, começando pela T-020
+(`POST /auth/signup`).
 
 | Artefato | Arquivo | Responde | Status |
 |---|---|---|---|
@@ -25,7 +26,7 @@ de testes de integração com Testcontainers.
 | Plan | `specs/000-fundacao/plan.md` | **Como**? | ✔ rev. 2, 42 decisões (D-01…D-42), aprovado |
 | Contrato | `specs/000-fundacao/contracts/openapi.yaml` | Qual é o acordo exato entre front e back? | ✔ v0.2.0, 29 operações, validado com Redocly, 85/85 ACs rastreados |
 | Tasks | `specs/000-fundacao/tasks.md` | Em que passos pequenos e verificáveis? | ✔ rev. 2, 58 tarefas em 7 fases, aprovado |
-| Código + testes | `backend/`, `frontend/` | Funciona conforme a spec? | ▶ próximo |
+| Código + testes | `backend/`, `frontend/` | Funciona conforme a spec? | ▶ Fases 0 e 1 prontas (19/58 tarefas, 481 testes); Fase 2 a seguir |
 
 ## 2. O que cada etapa ensinou (com exemplos deste projeto)
 
