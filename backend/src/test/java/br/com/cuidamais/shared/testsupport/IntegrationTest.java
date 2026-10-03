@@ -46,4 +46,9 @@ public abstract class IntegrationTest {
 
     @Autowired
     protected MutableClock clock;
+
+    /** Cliente da API HTTP do Mailpit (porta 8025), para ler e apagar os e-mails recebidos. */
+    protected static MailpitClient mailpit() {
+        return new MailpitClient(MAILPIT.getHost(), MAILPIT.getMappedPort(8025));
+    }
 }
